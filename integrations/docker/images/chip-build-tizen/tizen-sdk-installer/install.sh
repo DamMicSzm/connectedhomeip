@@ -28,6 +28,19 @@ SCRIPT_NAME=$(basename -- "$(readlink -f "${BASH_SOURCE:?}")")
 SCRIPT_DIR=$(dirname -- "$(readlink -f "${BASH_SOURCE:?}")")
 DEPENDENCIES=('cpio' 'openjdk-8-jre-headless' 'obs-build' 'wget' 'zip')
 
+OS="ubuntu"
+PKG_DEP=('cpio' 'unzip' 'wget' 'unrpm')
+if [[ $OSTYPE == 'darwin'* ]]; then
+    OS="macos"
+    DEPENDENCIES=('cpio' 'JAVA JRE 8.0' 'rpm2cpio' 'wget' 'zip' 'coreutils')
+    PKG_DEP=('cpio' 'unzip' 'wget' 'rpm2cpio' 'realpath')
+    function unrpm {
+        for RPM in "$@"; do
+            rpm2cpio "$RPM" | cpio -idmv
+        done
+    }
+fi
+
 # If color is available use colors
 if which tput >/dev/null 2>&1 && [[ $(tput -T $TERM colors) -ge 8 ]]; then
     COLOR_NONE="$(tput sgr0)"
@@ -60,19 +73,19 @@ function show_help() {
 # ------------------------------------------------------------------------------
 # Error print function
 function error() {
-    echo "$COLOR_RED[ERROR]: $1$COLOR_NONE"
+    echo "$COLOR_RED[ERROR]: $*$COLOR_NONE"
 }
 
 # ------------------------------------------------------------------------------
 # Info print function
 function info() {
-    echo "$COLOR_GREEN$1$COLOR_NONE"
+    echo "$COLOR_GREEN$*$COLOR_NONE"
 }
 
 # ------------------------------------------------------------------------------
 # Warning print function
 function warning() {
-    echo "$COLOR_YELLOW[WARNING]: $1$COLOR_NONE"
+    echo "$COLOR_YELLOW[WARNING]: $*$COLOR_NONE"
 }
 
 # ------------------------------------------------------------------------------
@@ -142,11 +155,11 @@ function install_tizen_sdk() {
     # Download
     URL="http://download.tizen.org/sdk/tizenstudio/official/binary/"
     PKG_ARR=(
-        'certificate-encryptor_1.0.7_ubuntu-64.zip'
-        'certificate-generator_0.1.3_ubuntu-64.zip'
-        'new-common-cli_2.5.7_ubuntu-64.zip'
-        'new-native-cli_2.5.7_ubuntu-64.zip'
-        'sdb_4.2.23_ubuntu-64.zip')
+        "certificate-encryptor_1.0.7_ubuntu-64.zip"
+        "certificate-generator_0.1.3_$OS-64.zip"
+        "new-common-cli_2.5.7_$OS-64.zip"
+        "new-native-cli_2.5.7_$OS-64.zip"
+        "sdb_4.2.23_$OS-64.zip")
     download "$URL" "${PKG_ARR[@]}"
 
     # Get toolchain
@@ -155,8 +168,8 @@ function install_tizen_sdk() {
     # Download
     URL="http://download.tizen.org/sdk/tizenstudio/official/binary/"
     PKG_ARR=(
-        "cross-arm-gcc-9.2_0.1.9_ubuntu-64.zip"
-        "sbi-toolchain-gcc-9.2.cpp.app_2.2.16_ubuntu-64.zip")
+        "cross-arm-gcc-9.2_0.1.9_$OS-64.zip"
+        "sbi-toolchain-gcc-9.2.cpp.app_2.2.16_$OS-64.zip")
     download "$URL" "${PKG_ARR[@]}"
 
     # Get tizen sysroot
@@ -166,8 +179,8 @@ function install_tizen_sdk() {
     # Different versions of tizen have different rootstrap versions
     URL="http://download.tizen.org/sdk/tizenstudio/official/binary/"
     PKG_ARR=(
-        "mobile-$TIZEN_VERSION-core-add-ons_*_ubuntu-64.zip"
-        "mobile-$TIZEN_VERSION-rs-device.core_*_ubuntu-64.zip")
+        "mobile-$TIZEN_VERSION-core-add-ons_*_$OS-64.zip"
+        "mobile-$TIZEN_VERSION-rs-device.core_*_$OS-64.zip")
     download "$URL" "${PKG_ARR[@]}"
 
     # Base packages
@@ -227,10 +240,10 @@ function install_tizen_sdk() {
     info "Installation Tizen SDK [...]"
 
     unzip -o '*.zip'
-    cp -rf data/* "$TIZEN_SDK_ROOT"
+    cp -Rf data/* "$TIZEN_SDK_ROOT"
 
     unrpm *.rpm
-    cp -rf lib usr "$TIZEN_SDK_SYSROOT"
+    cp -Rf lib usr "$TIZEN_SDK_SYSROOT"
 
     # Install secret tool or not
     if ("$SECRET_TOOL"); then
@@ -264,32 +277,32 @@ function install_tizen_sdk() {
 
 while (($#)); do
     case $1 in
-        --help)
-            show_help
-            exit 0
-            ;;
-        --tizen-sdk-path)
-            TIZEN_SDK_ROOT="$2"
-            shift
-            ;;
-        --tizen-sdk-data-path)
-            TIZEN_SDK_DATA_PATH="$2"
-            shift
-            ;;
-        --tizen-version)
-            TIZEN_VERSION=$2
-            shift
-            ;;
-        --install-dependencies)
-            INSTALL_DEPENDENCIES=true
-            ;;
-        --override-secret-tool)
-            SECRET_TOOL=true
-            ;;
-        *)
-            error "Wrong options usage!"
-            exit 1
-            ;;
+    --help)
+        show_help
+        exit 0
+        ;;
+    --tizen-sdk-path)
+        TIZEN_SDK_ROOT="$2"
+        shift
+        ;;
+    --tizen-sdk-data-path)
+        TIZEN_SDK_DATA_PATH="$2"
+        shift
+        ;;
+    --tizen-version)
+        TIZEN_VERSION=$2
+        shift
+        ;;
+    --install-dependencies)
+        INSTALL_DEPENDENCIES=true
+        ;;
+    --override-secret-tool)
+        SECRET_TOOL=true
+        ;;
+    *)
+        error "Wrong options usage!"
+        exit 1
+        ;;
     esac
     shift
 done
@@ -314,14 +327,14 @@ fi
 
 # ------------------------------------------------------------------------------
 # Checking dependencies needed to install the tizen platform
-for PKG in 'cpio' 'unzip' 'wget' 'unrpm'; do
+for PKG in "${PKG_DEP[@]}"; do
     if ! command -v "$PKG" &>/dev/null; then
         warning "Not found $PKG"
         dep_lost=1
     fi
 done
 if [[ $dep_lost ]]; then
-    error "You need install dependencies before [HINT]: On Ubuntu-like distro run: sudo apt install ${DEPENDENCIES[@]}"
+    error "You need install dependencies before [HINT]: Please install ${DEPENDENCIES[@]}"
     exit 1
 fi
 
