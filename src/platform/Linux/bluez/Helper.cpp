@@ -102,21 +102,21 @@ public:
 
 } // namespace
 
-// static gboolean BluezAdvertisingRelease(BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInvocation, gpointer apClosure)
-// {
-//     bool isSuccess           = false;
-//     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
-//     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
-//     VerifyOrExit(aAdv != nullptr, ChipLogError(DeviceLayer, "BluezLEAdvertisement1 is NULL in %s", __func__));
-//     ChipLogDetail(DeviceLayer, "Release adv object in %s", __func__);
+static gboolean BluezAdvertisingRelease(BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInvocation, gpointer apClosure)
+{
+    bool isSuccess           = false;
+    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+    VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
+    VerifyOrExit(aAdv != nullptr, ChipLogError(DeviceLayer, "BluezLEAdvertisement1 is NULL in %s", __func__));
+    ChipLogDetail(DeviceLayer, "Release adv object in %s", __func__);
 
-//     g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
-//     endpoint->mIsAdvertising = false;
-//     isSuccess                = true;
-// exit:
+    g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
+    endpoint->mIsAdvertising = false;
+    isSuccess                = true;
+exit:
 
-//     return isSuccess ? TRUE : FALSE;
-// }
+    return isSuccess ? TRUE : FALSE;
+}
 
 static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint)
 {
@@ -184,7 +184,7 @@ static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint
     // empty secondary channel for now
 
     bluez_object_skeleton_set_leadvertisement1(object, adv);
-    // g_signal_connect(adv, "handle-release", G_CALLBACK(BluezAdvertisingRelease), apEndpoint);
+    g_signal_connect(adv, "handle-release", G_CALLBACK(BluezAdvertisingRelease), apEndpoint);
 
     g_dbus_object_manager_server_export(apEndpoint->mpRoot, G_DBUS_OBJECT_SKELETON(object));
     g_object_unref(object);
@@ -1357,8 +1357,8 @@ static gboolean on_bluez_appeared_timeout(void * data)
 
     // err = BluezGattsAppRegister(endpoint);
     // SuccessOrExit(err);
-    // BluezAdvertisementSetup(endpoint);
-    // StartBluezAdv(endpoint);
+    BluezAdvertisementSetup(endpoint);
+    StartBluezAdv(endpoint);
     // exit:
     return G_SOURCE_REMOVE;
 }
@@ -1438,11 +1438,12 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     // bluezObjectsSetup(endpoint);
     g_bus_watch_name_on_connection(conn, BLUEZ_INTERFACE, G_BUS_NAME_WATCHER_FLAGS_NONE, BluezNameAppeared, BluezNameVanished,
                                    endpoint, NULL);
-exit:
 
     g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
     g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
+
+exit:
     if (error != nullptr)
         g_error_free(error);
 
