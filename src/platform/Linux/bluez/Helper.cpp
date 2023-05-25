@@ -102,21 +102,21 @@ public:
 
 } // namespace
 
-static gboolean BluezAdvertisingRelease(BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInvocation, gpointer apClosure)
-{
-    bool isSuccess           = false;
-    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
-    VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
-    VerifyOrExit(aAdv != nullptr, ChipLogError(DeviceLayer, "BluezLEAdvertisement1 is NULL in %s", __func__));
-    ChipLogDetail(DeviceLayer, "Release adv object in %s", __func__);
+// static gboolean BluezAdvertisingRelease(BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInvocation, gpointer apClosure)
+// {
+//     bool isSuccess           = false;
+//     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+//     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
+//     VerifyOrExit(aAdv != nullptr, ChipLogError(DeviceLayer, "BluezLEAdvertisement1 is NULL in %s", __func__));
+//     ChipLogDetail(DeviceLayer, "Release adv object in %s", __func__);
 
-    g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
-    endpoint->mIsAdvertising = false;
-    isSuccess                = true;
-exit:
+//     g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
+//     endpoint->mIsAdvertising = false;
+//     isSuccess                = true;
+// exit:
 
-    return isSuccess ? TRUE : FALSE;
-}
+//     return isSuccess ? TRUE : FALSE;
+// }
 
 static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint)
 {
@@ -184,7 +184,7 @@ static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint
     // empty secondary channel for now
 
     bluez_object_skeleton_set_leadvertisement1(object, adv);
-    g_signal_connect(adv, "handle-release", G_CALLBACK(BluezAdvertisingRelease), apEndpoint);
+    // g_signal_connect(adv, "handle-release", G_CALLBACK(BluezAdvertisingRelease), apEndpoint);
 
     g_dbus_object_manager_server_export(apEndpoint->mpRoot, G_DBUS_OBJECT_SKELETON(object));
     g_object_unref(object);
@@ -278,7 +278,16 @@ static CHIP_ERROR BluezAdvStart(BluezEndpoint * endpoint)
                  ChipLogError(DeviceLayer, "FAIL: Advertising has already been enabled in %s", __func__));
     VerifyOrExit(endpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL endpoint->mpAdapter in %s", __func__));
 
+    ChipLogError(DeviceLayer, "Tutaj12");
+    if (endpoint->mpAdapter == nullptr)
+    {
+        ChipLogError(DeviceLayer, "endpoint->mpAdapter == nullptr");
+    }
     adapter = g_dbus_interface_get_object(G_DBUS_INTERFACE(endpoint->mpAdapter));
+    if (adapter == nullptr)
+    {
+        ChipLogError(DeviceLayer, "adapter == nullptr");
+    }
     VerifyOrExit(adapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL adapter in %s", __func__));
 
     advMgr = bluez_object_get_leadvertising_manager1(BLUEZ_OBJECT(adapter));
@@ -304,6 +313,7 @@ static CHIP_ERROR BluezAdvStop(BluezEndpoint * endpoint)
                  ChipLogError(DeviceLayer, "FAIL: Advertising has already been disabled in %s", __func__));
     VerifyOrExit(endpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL endpoint->mpAdapter in %s", __func__));
 
+    ChipLogError(DeviceLayer, "Tutaj13");
     adapter = g_dbus_interface_get_object(G_DBUS_INTERFACE(endpoint->mpAdapter));
     VerifyOrExit(adapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL adapter in %s", __func__));
 
@@ -848,7 +858,17 @@ static CHIP_ERROR BluezPeripheralRegisterApp(BluezEndpoint * endpoint)
 
     VerifyOrExit(endpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL endpoint->mpAdapter in %s", __func__));
 
+    ChipLogError(DeviceLayer, "Tutaj11");
+    if (endpoint->mpAdapter == nullptr)
+    {
+        ChipLogError(DeviceLayer, "endpoint->mpAdapter == nullptr");
+    }
     adapter = g_dbus_interface_get_object(G_DBUS_INTERFACE(endpoint->mpAdapter));
+    if (adapter == nullptr)
+    {
+        ChipLogError(DeviceLayer, "adapter == nullptr");
+    }
+
     VerifyOrExit(adapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL adapter in %s", __func__));
 
     gattMgr = bluez_object_get_gatt_manager1(BLUEZ_OBJECT(adapter));
@@ -1326,7 +1346,58 @@ static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpo
 exit:
     return;
 }
+static gboolean on_bluez_appeared_timeout(void * data)
+{
+    ChipLogDetail(DeviceLayer, "on_bluez_appeared_timeout");
+    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(data);
+    // CHIP_ERROR err           = CHIP_NO_ERROR;
+    endpoint->mpAdapter = nullptr;
+    bluezObjectsSetup(endpoint);
+    BluezPeripheralRegisterApp(endpoint);
 
+    // err = BluezGattsAppRegister(endpoint);
+    // SuccessOrExit(err);
+    // BluezAdvertisementSetup(endpoint);
+    // StartBluezAdv(endpoint);
+    // exit:
+    return G_SOURCE_REMOVE;
+}
+static void BluezNameAppeared(GDBusConnection * apConn, const gchar * aName, const gchar * name_owner, gpointer apClosure)
+{
+    ChipLogDetail(DeviceLayer, "BluezNameAppeared: name: %s", aName);
+    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+
+    // VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "FAIL: memory allocation in %s", __func__));
+    // if (endpoint->mpAdapter != nullptr)
+    // {
+    //     ChipLogError(DeviceLayer, "endpoint->mAdapterId: %d", endpoint->mAdapterId);
+    // }
+
+    // bluezObjectsSetup(endpoint);
+    // BluezGattsAppRegister(endpoint);
+    g_dbus_object_manager_server_set_connection(endpoint->mpRoot, apConn);
+
+    GSource * idle = g_timeout_source_new(5000);
+    g_source_set_callback(idle, on_bluez_appeared_timeout, apClosure, NULL);
+    g_source_set_priority(idle, G_PRIORITY_HIGH_IDLE);
+    g_source_attach(idle, g_main_context_get_thread_default());
+    // g_timeout_add_seconds(5, on_bluez_appeared_timeout, endpoint);
+    // BluezGattsAppRegister(endpoint);
+    // BluezAdvertisementSetup(endpoint);
+    // StartBluezAdv(endpoint);
+
+    ChipLogError(DeviceLayer, "Tutaj");
+    // exit:
+    ChipLogError(DeviceLayer, "Tutaj2");
+    // EndpointCleanup(endpoint);
+}
+
+static void BluezNameVanished(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
+{
+    // BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+    ChipLogDetail(DeviceLayer, "BluezNameVanished: name: lost %s", aName);
+    // EndpointCleanup(endpoint);
+}
 #if CHIP_BLUEZ_NAME_MONITOR
 static void BluezOnNameAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
 {
@@ -1364,13 +1435,14 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
 
     endpoint->mpObjMgr = manager;
 
-    bluezObjectsSetup(endpoint);
+    // bluezObjectsSetup(endpoint);
+    g_bus_watch_name_on_connection(conn, BLUEZ_INTERFACE, G_BUS_NAME_WATCHER_FLAGS_NONE, BluezNameAppeared, BluezNameVanished,
+                                   endpoint, NULL);
+exit:
 
     g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
     g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
-
-exit:
     if (error != nullptr)
         g_error_free(error);
 
@@ -1495,6 +1567,7 @@ CHIP_ERROR BluezAdvertisementSetup(BluezEndpoint * apEndpoint)
 
 CHIP_ERROR BluezGattsAppRegister(BluezEndpoint * apEndpoint)
 {
+    ChipLogDetail(DeviceLayer, "BluezGattsAppRegister");
     CHIP_ERROR err = PlatformMgrImpl().GLibMatterContextInvokeSync(BluezPeripheralRegisterApp, apEndpoint);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_ERROR_INCORRECT_STATE,
                         ChipLogError(Ble, "Failed to schedule BluezPeripheralRegisterApp() on CHIPoBluez thread"));

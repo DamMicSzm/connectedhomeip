@@ -593,13 +593,13 @@ void BLEManagerImpl::DriveBLEState()
     }
 
     // Register the CHIPoBLE application with the Bluez BLE layer if needed.
-    if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered))
-    {
-        err = BluezGattsAppRegister(mpEndpoint);
-        SuccessOrExit(err);
-        mFlags.Set(Flags::kControlOpInProgress);
-        ExitNow();
-    }
+    // if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered))
+    // {
+    //     err = BluezGattsAppRegister(mpEndpoint);
+    //     SuccessOrExit(err);
+    //     mFlags.Set(Flags::kControlOpInProgress);
+    //     ExitNow();
+    // }
 
     // If the application has enabled CHIPoBLE and BLE advertising...
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && mFlags.Has(Flags::kAdvertisingEnabled))
@@ -619,26 +619,26 @@ void BLEManagerImpl::DriveBLEState()
                 ExitNow();
             }
 
-            // Start advertising.  This is also an asynchronous step.
-            err = StartBLEAdvertising();
-            SuccessOrExit(err);
+            // // Start advertising.  This is also an asynchronous step.
+            // err = StartBLEAdvertising();
+            // SuccessOrExit(err);
 
-            sInstance.mFlags.Set(Flags::kAdvertising);
-            ExitNow();
+            // sInstance.mFlags.Set(Flags::kAdvertising);
+            // ExitNow();
         }
     }
 
     // Otherwise stop advertising if needed...
     else
     {
-        if (mFlags.Has(Flags::kAdvertising))
-        {
-            err = StopBLEAdvertising();
-            SuccessOrExit(err);
-            mFlags.Set(Flags::kControlOpInProgress);
+        // if (mFlags.Has(Flags::kAdvertising))
+        // {
+        //     err = StopBLEAdvertising();
+        //     SuccessOrExit(err);
+        //     mFlags.Set(Flags::kControlOpInProgress);
 
-            ExitNow();
-        }
+        //     ExitNow();
+        // }
     }
 
 exit:
