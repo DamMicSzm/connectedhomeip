@@ -613,32 +613,32 @@ void BLEManagerImpl::DriveBLEState()
             // Configure advertising data if it hasn't been done yet.  This is an asynchronous step which
             // must complete before advertising can be started.  When that happens, this method will
             // be called again, and execution will proceed to the code below.
-            if (!mFlags.Has(Flags::kAdvertisingConfigured))
-            {
-                err = BluezAdvertisementSetup(mpEndpoint);
-                ExitNow();
-            }
+            // if (!mFlags.Has(Flags::kAdvertisingConfigured))
+            // {
+            //     // err = BluezAdvertisementSetup(mpEndpoint);
+            //     ExitNow();
+            // }
 
             // // Start advertising.  This is also an asynchronous step.
             // err = StartBLEAdvertising();
             // SuccessOrExit(err);
 
-            // sInstance.mFlags.Set(Flags::kAdvertising);
-            // ExitNow();
+            sInstance.mFlags.Set(Flags::kAdvertising);
+            ExitNow();
         }
     }
 
     // Otherwise stop advertising if needed...
     else
     {
-        // if (mFlags.Has(Flags::kAdvertising))
-        // {
-        //     err = StopBLEAdvertising();
-        //     SuccessOrExit(err);
-        //     mFlags.Set(Flags::kControlOpInProgress);
+        if (mFlags.Has(Flags::kAdvertising))
+        {
+            err = StopBLEAdvertising();
+            SuccessOrExit(err);
+            mFlags.Set(Flags::kControlOpInProgress);
 
-        //     ExitNow();
-        // }
+            ExitNow();
+        }
     }
 
 exit:

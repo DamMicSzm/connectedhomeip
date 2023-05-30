@@ -1327,75 +1327,66 @@ exit:
     return;
 }
 
-static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
-{
-    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
-    VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
+// static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
+// {
+//     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+//     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
 
-    ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
+//     ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
 
-    if (!endpoint->mIsCentral)
-    {
-        endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
-        endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
-        g_dbus_object_manager_server_set_connection(endpoint->mpRoot, aConn);
+//     if (!endpoint->mIsCentral)
+//     {
+//         endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
+//         endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
+//         g_dbus_object_manager_server_set_connection(endpoint->mpRoot, aConn);
 
-        BluezPeripheralObjectsSetup(apClosure);
-    }
+//         BluezPeripheralObjectsSetup(apClosure);
+//     }
 
-exit:
-    return;
-}
+// exit:
+//     return;
+// }
 static gboolean on_bluez_appeared_timeout(void * data)
 {
     ChipLogDetail(DeviceLayer, "on_bluez_appeared_timeout");
     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(data);
-    // CHIP_ERROR err           = CHIP_NO_ERROR;
+    gpointer * apClosure     = static_cast<gpointer *>(data);
+
     endpoint->mpAdapter = nullptr;
+
+    BluezPeripheralObjectsSetup(apClosure);
+
     bluezObjectsSetup(endpoint);
     BluezPeripheralRegisterApp(endpoint);
 
-    // err = BluezGattsAppRegister(endpoint);
-    // SuccessOrExit(err);
     BluezAdvertisementSetup(endpoint);
     StartBluezAdv(endpoint);
-    // exit:
+
     return G_SOURCE_REMOVE;
 }
 static void BluezNameAppeared(GDBusConnection * apConn, const gchar * aName, const gchar * name_owner, gpointer apClosure)
 {
     ChipLogDetail(DeviceLayer, "BluezNameAppeared: name: %s", aName);
+
     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
 
-    // VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "FAIL: memory allocation in %s", __func__));
-    // if (endpoint->mpAdapter != nullptr)
-    // {
-    //     ChipLogError(DeviceLayer, "endpoint->mAdapterId: %d", endpoint->mAdapterId);
-    // }
-
-    // bluezObjectsSetup(endpoint);
-    // BluezGattsAppRegister(endpoint);
     g_dbus_object_manager_server_set_connection(endpoint->mpRoot, apConn);
 
-    GSource * idle = g_timeout_source_new(5000);
+    GSource * idle = g_timeout_source_new(500);
     g_source_set_callback(idle, on_bluez_appeared_timeout, apClosure, NULL);
     g_source_set_priority(idle, G_PRIORITY_HIGH_IDLE);
     g_source_attach(idle, g_main_context_get_thread_default());
-    // g_timeout_add_seconds(5, on_bluez_appeared_timeout, endpoint);
-    // BluezGattsAppRegister(endpoint);
-    // BluezAdvertisementSetup(endpoint);
-    // StartBluezAdv(endpoint);
-
-    ChipLogError(DeviceLayer, "Tutaj");
-    // exit:
-    ChipLogError(DeviceLayer, "Tutaj2");
-    // EndpointCleanup(endpoint);
 }
 
 static void BluezNameVanished(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
 {
-    // BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
     ChipLogDetail(DeviceLayer, "BluezNameVanished: name: lost %s", aName);
+
+    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+
+    g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
+    g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpServicePath);
+    endpoint->mIsAdvertising = false;
     // EndpointCleanup(endpoint);
 }
 #if CHIP_BLUEZ_NAME_MONITOR
@@ -1425,7 +1416,12 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     else
         endpoint->mpOwningName = g_strdup_printf("C-%04x", getpid() & 0xffff);
 
-    BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
+    // BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
+    if (!endpoint->mIsCentral)
+    {
+        endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
+        endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
+    }
 
     manager = g_dbus_object_manager_client_new_sync(
         conn, G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE, BLUEZ_INTERFACE, "/", bluez_object_manager_client_get_proxy_type,
@@ -1435,9 +1431,9 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
 
     endpoint->mpObjMgr = manager;
 
-    // bluezObjectsSetup(endpoint);
     g_bus_watch_name_on_connection(conn, BLUEZ_INTERFACE, G_BUS_NAME_WATCHER_FLAGS_NONE, BluezNameAppeared, BluezNameVanished,
                                    endpoint, NULL);
+    // bluezObjectsSetup(endpoint);
 
     g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
