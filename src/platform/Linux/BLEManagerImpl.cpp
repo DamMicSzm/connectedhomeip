@@ -662,6 +662,10 @@ void BLEManagerImpl::NotifyChipConnectionClosed(BLE_CONNECTION_OBJECT conId)
 void BLEManagerImpl::InitiateScan(BleScanState scanType)
 {
     DriveBLEState();
+    do
+    {
+
+    } while (mpEndpoint->mpAdapter != nullptr);
 
     if (scanType == BleScanState::kNotScanning)
     {

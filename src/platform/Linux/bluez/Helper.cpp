@@ -1327,33 +1327,17 @@ exit:
     return;
 }
 
-// static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
-// {
-//     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
-//     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
-
-//     ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
-
-//     if (!endpoint->mIsCentral)
-//     {
-//         endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
-//         endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
-//         g_dbus_object_manager_server_set_connection(endpoint->mpRoot, aConn);
-
-//         BluezPeripheralObjectsSetup(apClosure);
-//     }
-
-// exit:
-//     return;
-// }
 static gboolean on_bluez_appeared_timeout(void * data)
 {
     ChipLogDetail(DeviceLayer, "on_bluez_appeared_timeout");
     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(data);
     gpointer * apClosure     = static_cast<gpointer *>(data);
+    GDBusConnection * conn   = nullptr;
 
     endpoint->mpAdapter = nullptr;
 
+    conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+    g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
     BluezPeripheralObjectsSetup(apClosure);
 
     bluezObjectsSetup(endpoint);
@@ -1368,9 +1352,9 @@ static void BluezNameAppeared(GDBusConnection * apConn, const gchar * aName, con
 {
     ChipLogDetail(DeviceLayer, "BluezNameAppeared: name: %s", aName);
 
-    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+    // BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
 
-    g_dbus_object_manager_server_set_connection(endpoint->mpRoot, apConn);
+    // g_dbus_object_manager_server_set_connection(endpoint->mpRoot, apConn);
 
     GSource * idle = g_timeout_source_new(500);
     g_source_set_callback(idle, on_bluez_appeared_timeout, apClosure, NULL);
