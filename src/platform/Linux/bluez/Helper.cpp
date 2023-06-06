@@ -87,7 +87,6 @@ namespace Internal {
 constexpr uint16_t kMaxConnectRetries = 4;
 
 static BluezConnection * GetBluezConnectionViaDevice(BluezEndpoint * apEndpoint);
-
 namespace {
 
 class BluezEndpointObjectList : public BluezObjectList
@@ -1335,28 +1334,39 @@ static gboolean on_bluez_appeared_timeout(void * data)
     GDBusConnection * conn   = nullptr;
 
     endpoint->mpAdapter = nullptr;
+    bluezObjectsSetup(endpoint);
 
     conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
     g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
-    BluezPeripheralObjectsSetup(apClosure);
 
-    bluezObjectsSetup(endpoint);
+    ChipLogDetail(DeviceLayer, "TU4");
+    BLEManagerImpl::MutexLock();
+
+    ChipLogDetail(DeviceLayer, "TU4.1");
+    // bluezObjectsSetup(endpoint);
+    BluezPeripheralObjectsSetup(apClosure);
+    ChipLogDetail(DeviceLayer, "TU4.2");
+
+    ChipLogDetail(DeviceLayer, "TU4.3");
     BluezPeripheralRegisterApp(endpoint);
 
+    ChipLogDetail(DeviceLayer, "TU4.4");
     BluezAdvertisementSetup(endpoint);
+
+    ChipLogDetail(DeviceLayer, "TU4.5");
     StartBluezAdv(endpoint);
 
+    ChipLogDetail(DeviceLayer, "TU5");
+
+    BLEManagerImpl::SignalCond();
+    BLEManagerImpl::MutexUnLock();
     return G_SOURCE_REMOVE;
 }
 static void BluezNameAppeared(GDBusConnection * apConn, const gchar * aName, const gchar * name_owner, gpointer apClosure)
 {
     ChipLogDetail(DeviceLayer, "BluezNameAppeared: name: %s", aName);
 
-    // BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
-
-    // g_dbus_object_manager_server_set_connection(endpoint->mpRoot, apConn);
-
-    GSource * idle = g_timeout_source_new(500);
+    GSource * idle = g_timeout_source_new(1000);
     g_source_set_callback(idle, on_bluez_appeared_timeout, apClosure, NULL);
     g_source_set_priority(idle, G_PRIORITY_HIGH_IDLE);
     g_source_attach(idle, g_main_context_get_thread_default());
@@ -1371,7 +1381,6 @@ static void BluezNameVanished(GDBusConnection * aConn, const gchar * aName, gpoi
     g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
     g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpServicePath);
     endpoint->mIsAdvertising = false;
-    // EndpointCleanup(endpoint);
 }
 #if CHIP_BLUEZ_NAME_MONITOR
 static void BluezOnNameAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
@@ -1418,7 +1427,6 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     g_bus_watch_name_on_connection(conn, BLUEZ_INTERFACE, G_BUS_NAME_WATCHER_FLAGS_NONE, BluezNameAppeared, BluezNameVanished,
                                    endpoint, NULL);
     // bluezObjectsSetup(endpoint);
-
     g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
     g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);

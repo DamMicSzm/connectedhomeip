@@ -54,6 +54,9 @@ const ChipBleUUID ChipUUID_CHIPoBLEChar_RX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0
                                                  0x9D, 0x11 } };
 const ChipBleUUID ChipUUID_CHIPoBLEChar_TX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0x3D, 0x45, 0x59, 0x95, 0x9F, 0x4F, 0x9C, 0x42, 0x9F,
                                                  0x9D, 0x12 } };
+GMutex data_mutex;
+GCond data_cond;
+gboolean initial_finish = false;
 
 void HandleConnectTimeout(chip::System::Layer *, void * apEndpoint)
 {
@@ -587,19 +590,29 @@ void BLEManagerImpl::DriveBLEState()
     // Initializes the Bluez BLE layer if needed.
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kBluezBLELayerInitialized))
     {
+        ChipLogDetail(DeviceLayer, "DriveBLEState");
         err = InitBluezBleLayer(mIsCentral, nullptr, mBLEAdvConfig, mpEndpoint);
+        g_mutex_lock(&data_mutex);
+        while (!initial_finish)
+        {
+            ChipLogDetail(DeviceLayer, "DriveBLEState -tu");
+            g_cond_wait(&data_cond, &data_mutex);
+        }
+        ChipLogDetail(DeviceLayer, "DriveBLEState-tu-end");
+        g_mutex_unlock(&data_mutex);
+
         SuccessOrExit(err);
         mFlags.Set(Flags::kBluezBLELayerInitialized);
     }
 
     // Register the CHIPoBLE application with the Bluez BLE layer if needed.
-    // if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered))
-    // {
-    //     err = BluezGattsAppRegister(mpEndpoint);
-    //     SuccessOrExit(err);
-    //     mFlags.Set(Flags::kControlOpInProgress);
-    //     ExitNow();
-    // }
+    if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered))
+    {
+        err = BluezGattsAppRegister(mpEndpoint);
+        SuccessOrExit(err);
+        mFlags.Set(Flags::kControlOpInProgress);
+        ExitNow();
+    }
 
     // If the application has enabled CHIPoBLE and BLE advertising...
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && mFlags.Has(Flags::kAdvertisingEnabled))
@@ -611,17 +624,17 @@ void BLEManagerImpl::DriveBLEState()
             mFlags.Clear(Flags::kAdvertisingRefreshNeeded);
 
             // Configure advertising data if it hasn't been done yet.  This is an asynchronous step which
-            // must complete before advertising can be started.  When that happens, this method will
-            // be called again, and execution will proceed to the code below.
-            // if (!mFlags.Has(Flags::kAdvertisingConfigured))
-            // {
-            //     // err = BluezAdvertisementSetup(mpEndpoint);
-            //     ExitNow();
-            // }
+            //     must complete before advertising can be started.  When that happens, this method will
+            //     be called again, and execution will proceed to the code below.
+            if (!mFlags.Has(Flags::kAdvertisingConfigured))
+            {
+                err = BluezAdvertisementSetup(mpEndpoint);
+                ExitNow();
+            }
 
-            // // Start advertising.  This is also an asynchronous step.
-            // err = StartBLEAdvertising();
-            // SuccessOrExit(err);
+            // Start advertising.This is also an asynchronous step.
+            err = StartBLEAdvertising();
+            SuccessOrExit(err);
 
             sInstance.mFlags.Set(Flags::kAdvertising);
             ExitNow();
@@ -661,11 +674,8 @@ void BLEManagerImpl::NotifyChipConnectionClosed(BLE_CONNECTION_OBJECT conId)
 
 void BLEManagerImpl::InitiateScan(BleScanState scanType)
 {
-    DriveBLEState();
-    do
-    {
 
-    } while (mpEndpoint->mpAdapter != nullptr);
+    DriveBLEState();
 
     if (scanType == BleScanState::kNotScanning)
     {
@@ -680,6 +690,13 @@ void BLEManagerImpl::InitiateScan(BleScanState scanType)
         ChipLogError(Ble, "BLE Layer is not yet initialized");
         return;
     }
+    // g_mutex_lock(&data_mutex);
+    // while (!initial_finish)
+    // {
+    //     ChipLogDetail(DeviceLayer, "DriveBLEState -tu");
+    //     g_cond_wait(&data_cond, &data_mutex);
+    // }
+    // g_mutex_unlock(&data_mutex);
 
     if (mpEndpoint->mpAdapter == nullptr)
     {
@@ -698,7 +715,6 @@ void BLEManagerImpl::InitiateScan(BleScanState scanType)
         ChipLogError(Ble, "Failed to create a BLE device scanner");
         return;
     }
-
     CHIP_ERROR err = mDeviceScanner->StartScan(kNewConnectionScanTimeout);
     if (err != CHIP_NO_ERROR)
     {
@@ -770,6 +786,22 @@ void BLEManagerImpl::NotifyBLEPeripheralAdvStopComplete(bool aIsSuccess, void * 
     event.Platform.BLEPeripheralAdvStopComplete.mIsSuccess = aIsSuccess;
     event.Platform.BLEPeripheralAdvStopComplete.mpAppstate = apAppstate;
     PlatformMgr().PostEventOrDie(&event);
+}
+
+void BLEManagerImpl::SignalCond()
+{
+    initial_finish = true;
+    g_cond_signal(&data_cond);
+}
+
+void BLEManagerImpl::MutexLock()
+{
+    g_mutex_lock(&data_mutex);
+}
+
+void BLEManagerImpl::MutexUnLock()
+{
+    g_mutex_unlock(&data_mutex);
 }
 
 void BLEManagerImpl::OnDeviceScanned(BluezDevice1 * device, const chip::Ble::ChipBLEDeviceIdentificationInfo & info)

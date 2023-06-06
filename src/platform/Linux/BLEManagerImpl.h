@@ -109,6 +109,10 @@ public:
     static void NotifyBLEPeripheralAdvStartComplete(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralAdvStopComplete(bool aIsSuccess, void * apAppstate);
 
+    static void SignalCond();
+    static void MutexLock();
+    static void MutexUnLock();
+
 private:
     // ===== Members that implement the BLEManager internal interface.
 
