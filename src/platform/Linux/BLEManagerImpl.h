@@ -105,9 +105,14 @@ public:
     static void HandleTXComplete(BLE_CONNECTION_OBJECT user_data);
 
     static void NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, void * apAppstate);
+    static void NotifyBLEPeripheralInterfaceConnect(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralAdvConfiguredComplete(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralAdvStartComplete(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralAdvStopComplete(bool aIsSuccess, void * apAppstate);
+
+    static void SignalCond();
+    static void MutexLock();
+    static void MutexUnLock();
 
 private:
     // ===== Members that implement the BLEManager internal interface.
@@ -191,6 +196,7 @@ private:
 
     void DriveBLEState();
     static void DriveBLEState(intptr_t arg);
+    void DriveCHIPoBLEState();
 
     void InitiateScan(BleScanState scanType);
     static void InitiateScan(intptr_t arg);

@@ -55,7 +55,8 @@ enum InternalPlatformSpecificEventTypes
     kPlatformLinuxBLEPeripheralRegisterAppComplete,
     kPlatformLinuxBLEPeripheralAdvConfiguredComplete,
     kPlatformLinuxBLEPeripheralAdvStartComplete,
-    kPlatformLinuxBLEPeripheralAdvStopComplete
+    kPlatformLinuxBLEPeripheralAdvStopComplete,
+    kPlatformLinuxBLEPeripheralInterfaceConnect
 };
 
 } // namespace DeviceEventType
@@ -94,6 +95,11 @@ struct ChipDevicePlatformEvent
             bool mIsSuccess;
             void * mpAppstate;
         } BLEPeripheralRegisterAppComplete;
+        struct
+        {
+            bool mIsSuccess;
+            void * mpAppstate;
+        } BLEPeripheralInterfaceConnect;
         struct
         {
             bool mIsSuccess;

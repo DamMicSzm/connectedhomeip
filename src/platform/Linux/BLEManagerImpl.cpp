@@ -54,6 +54,9 @@ const ChipBleUUID ChipUUID_CHIPoBLEChar_RX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0
                                                  0x9D, 0x11 } };
 const ChipBleUUID ChipUUID_CHIPoBLEChar_TX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0x3D, 0x45, 0x59, 0x95, 0x9F, 0x4F, 0x9C, 0x42, 0x9F,
                                                  0x9D, 0x12 } };
+GMutex data_mutex;
+GCond data_cond;
+gboolean initial_finish = false;
 
 void HandleConnectTimeout(chip::System::Layer *, void * apEndpoint)
 {
@@ -316,6 +319,15 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
         VerifyOrExit(apEvent->Platform.BLEPeripheralRegisterAppComplete.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
         mFlags.Set(Flags::kAppRegistered);
         controlOpComplete = true;
+        break;
+    case DeviceEventType::kPlatformLinuxBLEPeripheralInterfaceConnect:
+        ChipLogDetail(DeviceLayer, "kPlatformLinuxBLEPeripheralInterfaceConnect");
+        VerifyOrExit(apEvent->Platform.BLEPeripheralInterfaceConnect.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
+        mFlags.Clear(Flags::kAppRegistered);
+        mFlags.Clear(Flags::kAdvertising);
+        mFlags.Clear(Flags::kAdvertisingConfigured);
+
+        DriveCHIPoBLEState();
         break;
     default:
         break;
@@ -582,23 +594,39 @@ void BLEManagerImpl::DriveBLEState()
     }
 
     // If there's already a control operation in progress, wait until it completes.
-    VerifyOrExit(!mFlags.Has(Flags::kControlOpInProgress), /* */);
+    // VerifyOrExit(!mFlags.Has(Flags::kControlOpInProgress), /* */);
 
     // Initializes the Bluez BLE layer if needed.
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kBluezBLELayerInitialized))
     {
+        ChipLogDetail(DeviceLayer, "TUTAJ!!!");
+        g_mutex_lock(&data_mutex);
         err = InitBluezBleLayer(mIsCentral, nullptr, mBLEAdvConfig, mpEndpoint);
+        while (!initial_finish)
+            g_cond_wait(&data_cond, &data_mutex);
+        g_mutex_unlock(&data_mutex);
         SuccessOrExit(err);
         mFlags.Set(Flags::kBluezBLELayerInitialized);
     }
 
+exit:
+    if (err != CHIP_NO_ERROR)
+    {
+        ChipLogError(DeviceLayer, "Disabling CHIPoBLE service due to error: %s", ErrorStr(err));
+        mServiceMode = ConnectivityManager::kCHIPoBLEServiceMode_Disabled;
+    }
+}
+
+void BLEManagerImpl::DriveCHIPoBLEState()
+{
+    CHIP_ERROR err = CHIP_NO_ERROR;
     // Register the CHIPoBLE application with the Bluez BLE layer if needed.
     if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered))
     {
+        ChipLogDetail(DeviceLayer, "TUTAJ1!!!");
         err = BluezGattsAppRegister(mpEndpoint);
         SuccessOrExit(err);
         mFlags.Set(Flags::kControlOpInProgress);
-        ExitNow();
     }
 
     // If the application has enabled CHIPoBLE and BLE advertising...
@@ -616,9 +644,7 @@ void BLEManagerImpl::DriveBLEState()
             if (!mFlags.Has(Flags::kAdvertisingConfigured))
             {
                 err = BluezAdvertisementSetup(mpEndpoint);
-                ExitNow();
             }
-
             // Start advertising.  This is also an asynchronous step.
             err = StartBLEAdvertising();
             SuccessOrExit(err);
@@ -741,6 +767,15 @@ void BLEManagerImpl::NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, voi
     PlatformMgr().PostEventOrDie(&event);
 }
 
+void BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(bool aIsSuccess, void * apAppstate)
+{
+    ChipDeviceEvent event;
+    event.Type                                              = DeviceEventType::kPlatformLinuxBLEPeripheralInterfaceConnect;
+    event.Platform.BLEPeripheralInterfaceConnect.mIsSuccess = aIsSuccess;
+    event.Platform.BLEPeripheralInterfaceConnect.mpAppstate = apAppstate;
+    PlatformMgr().PostEventOrDie(&event);
+}
+
 void BLEManagerImpl::NotifyBLEPeripheralAdvConfiguredComplete(bool aIsSuccess, void * apAppstate)
 {
     ChipDeviceEvent event;
@@ -766,6 +801,22 @@ void BLEManagerImpl::NotifyBLEPeripheralAdvStopComplete(bool aIsSuccess, void * 
     event.Platform.BLEPeripheralAdvStopComplete.mIsSuccess = aIsSuccess;
     event.Platform.BLEPeripheralAdvStopComplete.mpAppstate = apAppstate;
     PlatformMgr().PostEventOrDie(&event);
+}
+
+void BLEManagerImpl::SignalCond()
+{
+    initial_finish = true;
+    g_cond_signal(&data_cond);
+}
+
+void BLEManagerImpl::MutexLock()
+{
+    g_mutex_lock(&data_mutex);
+}
+
+void BLEManagerImpl::MutexUnLock()
+{
+    g_mutex_unlock(&data_mutex);
 }
 
 void BLEManagerImpl::OnDeviceScanned(BluezDevice1 * device, const chip::Ble::ChipBLEDeviceIdentificationInfo & info)

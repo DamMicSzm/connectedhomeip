@@ -162,6 +162,7 @@ struct BluezEndpoint
     chip::Ble::ChipBLEDeviceIdentificationInfo mDeviceIdInfo;
     ChipAdvType mType;  ///< Advertisement type.
     uint16_t mDuration; ///< Advertisement interval (in ms).
+    bool mIsAdvertisingConfigured;
     bool mIsAdvertising;
     char * mpPeerDevicePath;
     GCancellable * mpConnectCancellable = nullptr;

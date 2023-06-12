@@ -87,7 +87,6 @@ namespace Internal {
 constexpr uint16_t kMaxConnectRetries = 4;
 
 static BluezConnection * GetBluezConnectionViaDevice(BluezEndpoint * apEndpoint);
-
 namespace {
 
 class BluezEndpointObjectList : public BluezObjectList
@@ -1307,26 +1306,51 @@ exit:
     return;
 }
 
-static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
+static gboolean on_bluez_interface_available(void * data)
 {
-    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
-    VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
+    ChipLogDetail(DeviceLayer, "on_bluez_appeared_timeout");
+    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(data);
+    GDBusConnection * conn   = nullptr;
 
-    ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
-
+    endpoint->mpAdapter = nullptr;
+    BLEManagerImpl::MutexLock();
+    bluezObjectsSetup(endpoint);
     if (!endpoint->mIsCentral)
     {
         endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
         endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
-        g_dbus_object_manager_server_set_connection(endpoint->mpRoot, aConn);
 
-        BluezPeripheralObjectsSetup(apClosure);
+        conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+        g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
+        BluezPeripheralObjectsSetup(endpoint);
     }
+    BLEManagerImpl::SignalCond();
+    BLEManagerImpl::MutexUnLock();
 
-exit:
-    return;
+    BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(true, nullptr);
+
+    return G_SOURCE_REMOVE;
+}
+static void BluezNameAppeared(GDBusConnection * apConn, const gchar * aName, const gchar * name_owner, gpointer apClosure)
+{
+    ChipLogDetail(DeviceLayer, "BluezNameAppeared: name: %s", aName);
+    GSource * idle = g_timeout_source_new(500);
+
+    g_source_set_callback(idle, on_bluez_interface_available, apClosure, NULL);
+    g_source_set_priority(idle, G_PRIORITY_HIGH_IDLE);
+    g_source_attach(idle, g_main_context_get_thread_default());
 }
 
+static void BluezNameVanished(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
+{
+    ChipLogDetail(DeviceLayer, "BluezNameVanished: name: lost %s", aName);
+
+    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+
+    g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
+    g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpServicePath);
+    g_object_unref(endpoint->mpRoot);
+}
 #if CHIP_BLUEZ_NAME_MONITOR
 static void BluezOnNameAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
 {
@@ -1354,8 +1378,6 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     else
         endpoint->mpOwningName = g_strdup_printf("C-%04x", getpid() & 0xffff);
 
-    BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
-
     manager = g_dbus_object_manager_client_new_sync(
         conn, G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE, BLUEZ_INTERFACE, "/", bluez_object_manager_client_get_proxy_type,
         nullptr /* unused user data in the Proxy Type Func */, nullptr /*destroy notify */, nullptr /* cancellable */, &error);
@@ -1364,8 +1386,8 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
 
     endpoint->mpObjMgr = manager;
 
-    bluezObjectsSetup(endpoint);
-
+    g_bus_watch_name_on_connection(conn, BLUEZ_INTERFACE, G_BUS_NAME_WATCHER_FLAGS_NONE, BluezNameAppeared, BluezNameVanished,
+                                   endpoint, NULL);
     g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
     g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
@@ -1487,6 +1509,7 @@ CHIP_ERROR StopBluezAdv(BluezEndpoint * apEndpoint)
 
 CHIP_ERROR BluezAdvertisementSetup(BluezEndpoint * apEndpoint)
 {
+    ChipLogDetail(DeviceLayer, "BluezAdvertisementSetup");
     CHIP_ERROR err = PlatformMgrImpl().GLibMatterContextInvokeSync(BluezAdvSetup, apEndpoint);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_ERROR_INCORRECT_STATE,
                         ChipLogError(Ble, "Failed to schedule BluezAdvSetup() on CHIPoBluez thread"));
@@ -1495,6 +1518,7 @@ CHIP_ERROR BluezAdvertisementSetup(BluezEndpoint * apEndpoint)
 
 CHIP_ERROR BluezGattsAppRegister(BluezEndpoint * apEndpoint)
 {
+    ChipLogDetail(DeviceLayer, "BluezGattsAppRegister");
     CHIP_ERROR err = PlatformMgrImpl().GLibMatterContextInvokeSync(BluezPeripheralRegisterApp, apEndpoint);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_ERROR_INCORRECT_STATE,
                         ChipLogError(Ble, "Failed to schedule BluezPeripheralRegisterApp() on CHIPoBluez thread"));
