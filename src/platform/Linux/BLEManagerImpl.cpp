@@ -54,9 +54,9 @@ const ChipBleUUID ChipUUID_CHIPoBLEChar_RX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0
                                                  0x9D, 0x11 } };
 const ChipBleUUID ChipUUID_CHIPoBLEChar_TX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0x3D, 0x45, 0x59, 0x95, 0x9F, 0x4F, 0x9C, 0x42, 0x9F,
                                                  0x9D, 0x12 } };
-GMutex data_mutex;
-GCond data_cond;
-gboolean initial_finish = false;
+// GMutex data_mutex;
+// GCond data_cond;
+// gboolean initial_finish = FALSE;
 
 void HandleConnectTimeout(chip::System::Layer *, void * apEndpoint)
 {
@@ -600,11 +600,13 @@ void BLEManagerImpl::DriveBLEState()
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kBluezBLELayerInitialized))
     {
         ChipLogDetail(DeviceLayer, "TUTAJ!!!");
-        g_mutex_lock(&data_mutex);
+        // g_mutex_lock(&data_mutex);
+        std::unique_lock<std::mutex> lk(initMutex);
         err = InitBluezBleLayer(mIsCentral, nullptr, mBLEAdvConfig, mpEndpoint);
-        while (!initial_finish)
-            g_cond_wait(&data_cond, &data_mutex);
-        g_mutex_unlock(&data_mutex);
+        init_data_cond.wait(lk, [&] { return initial_finish == true; });
+        // while (!initial_finish)
+        //     g_cond_wait(&data_cond, &data_mutex);
+        // g_mutex_unlock(&data_mutex);
         SuccessOrExit(err);
         mFlags.Set(Flags::kBluezBLELayerInitialized);
     }
@@ -803,20 +805,15 @@ void BLEManagerImpl::NotifyBLEPeripheralAdvStopComplete(bool aIsSuccess, void * 
     PlatformMgr().PostEventOrDie(&event);
 }
 
-void BLEManagerImpl::SignalCond()
+void BLEManagerImpl::LocktDriveBLEState()
+{
+    std::lock_guard<std::mutex> lk(initMutex);
+}
+
+void BLEManagerImpl::UnLocktDriveBLEState()
 {
     initial_finish = true;
-    g_cond_signal(&data_cond);
-}
-
-void BLEManagerImpl::MutexLock()
-{
-    g_mutex_lock(&data_mutex);
-}
-
-void BLEManagerImpl::MutexUnLock()
-{
-    g_mutex_unlock(&data_mutex);
+    init_data_cond.notify_all();
 }
 
 void BLEManagerImpl::OnDeviceScanned(BluezDevice1 * device, const chip::Ble::ChipBLEDeviceIdentificationInfo & info)

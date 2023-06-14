@@ -23,6 +23,9 @@
 
 #pragma once
 
+#include <condition_variable>
+#include <thread>
+
 #include <ble/BleLayer.h>
 #include <platform/internal/BLEManager.h>
 
@@ -110,9 +113,8 @@ public:
     static void NotifyBLEPeripheralAdvStartComplete(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralAdvStopComplete(bool aIsSuccess, void * apAppstate);
 
-    static void SignalCond();
-    static void MutexLock();
-    static void MutexUnLock();
+    void LocktDriveBLEState();
+    void UnLocktDriveBLEState();
 
 private:
     // ===== Members that implement the BLEManager internal interface.
@@ -210,6 +212,9 @@ private:
     bool mIsCentral            = false;
     BluezEndpoint * mpEndpoint = nullptr;
     std::unique_ptr<ChipDeviceScanner> mDeviceScanner;
+    std::mutex initMutex;
+    std::condition_variable init_data_cond;
+    bool initial_finish = false;
 };
 
 /**

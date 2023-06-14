@@ -965,6 +965,7 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
     if (BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
     {
         BluezHandleNewDevice(device, endpoint);
+        ChipLogDetail(DeviceLayer, "BluezHandleNewDevice");
     }
 
     g_object_unref(device);
@@ -1042,6 +1043,7 @@ static void bluezObjectsSetup(BluezEndpoint * apEndpoint)
         }
         g_list_free_full(interfaces, g_object_unref);
     }
+
     VerifyOrExit(apEndpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL apEndpoint->mpAdapter in %s", __func__));
     bluez_adapter1_set_powered(apEndpoint->mpAdapter, TRUE);
 
@@ -1313,8 +1315,10 @@ static gboolean on_bluez_interface_available(void * data)
     GDBusConnection * conn   = nullptr;
 
     endpoint->mpAdapter = nullptr;
-    BLEManagerImpl::MutexLock();
+
+    BLEMgrImpl().LocktDriveBLEState();
     bluezObjectsSetup(endpoint);
+
     if (!endpoint->mIsCentral)
     {
         endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
@@ -1324,8 +1328,28 @@ static gboolean on_bluez_interface_available(void * data)
         g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
         BluezPeripheralObjectsSetup(endpoint);
     }
-    BLEManagerImpl::SignalCond();
-    BLEManagerImpl::MutexUnLock();
+    BLEMgrImpl().UnLocktDriveBLEState();
+
+    // BLEMgrImpl().initial_finish = TRUE;
+    // BLEMgrImpl().init_data_cond.notify_all();
+
+    // BLEMgrImpl().SyncInitDriveBLEState(
+    //     [](void * data_) {
+    //         BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(data_);
+    //         GDBusConnection * conn   = nullptr;
+
+    //         endpoint->mpAdapter = nullptr;
+    //         if (!endpoint->mIsCentral)
+    //         {
+    //             endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
+    //             endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
+
+    //             conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+    //             g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
+    //             BluezPeripheralObjectsSetup(endpoint);
+    //         }
+    //     },
+    //     data);
 
     BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(true, nullptr);
 
@@ -1334,7 +1358,7 @@ static gboolean on_bluez_interface_available(void * data)
 static void BluezNameAppeared(GDBusConnection * apConn, const gchar * aName, const gchar * name_owner, gpointer apClosure)
 {
     ChipLogDetail(DeviceLayer, "BluezNameAppeared: name: %s", aName);
-    GSource * idle = g_timeout_source_new(500);
+    GSource * idle = g_timeout_source_new(1000);
 
     g_source_set_callback(idle, on_bluez_interface_available, apClosure, NULL);
     g_source_set_priority(idle, G_PRIORITY_HIGH_IDLE);
