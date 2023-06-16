@@ -269,6 +269,7 @@ exit:
 
 static CHIP_ERROR BluezAdvStart(BluezEndpoint * endpoint)
 {
+    ChipLogDetail(DeviceLayer, "BluezAdvStart");
     GDBusObject * adapter;
     BluezLEAdvertisingManager1 * advMgr = nullptr;
     GVariantBuilder optionsBuilder;
@@ -967,31 +968,6 @@ exit:
     return;
 }
 
-static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
-{
-    // TODO: right now we do not handle addition/removal of adapters
-    // Primary focus here is to handle addition of a device
-    BluezDevice1 * device = bluez_object_get_device1(BLUEZ_OBJECT(aObject));
-    if (device == nullptr)
-    {
-        return;
-    }
-
-    if (BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
-    {
-        BluezHandleNewDevice(device, endpoint);
-    }
-
-    g_object_unref(device);
-}
-
-static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, gpointer apClosure)
-{
-    // TODO: for Device1, lookup connection, and call otPlatTobleHandleDisconnected
-    // for Adapter1: unclear, crash if this pertains to our adapter? at least null out the endpoint->mpAdapter.
-    // for Characteristic1, or GattService -- handle here via calling otPlatTobleHandleDisconnected, or ignore.
-}
-
 static BluezGattService1 * BluezServiceCreate(gpointer apClosure)
 {
     BluezObjectSkeleton * object;
@@ -1057,13 +1033,17 @@ static void bluezObjectsSetup(BluezEndpoint * apEndpoint)
         }
         g_list_free_full(interfaces, g_object_unref);
     }
+
     VerifyOrExit(apEndpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL apEndpoint->mpAdapter in %s", __func__));
-    bluez_adapter1_set_powered(apEndpoint->mpAdapter, TRUE);
+
+    if (bluez_adapter1_get_powered(apEndpoint->mpAdapter) != TRUE)
+        bluez_adapter1_set_powered(apEndpoint->mpAdapter, TRUE);
 
     // Setting "Discoverable" to False on the adapter and to True on the advertisement convinces
     // Bluez to set "BR/EDR Not Supported" flag. Bluez doesn't provide API to do that explicitly
     // and the flag is necessary to force using LE transport.
-    bluez_adapter1_set_discoverable(apEndpoint->mpAdapter, FALSE);
+    if (bluez_adapter1_get_discoverable(apEndpoint->mpAdapter) != FALSE)
+        bluez_adapter1_set_discoverable(apEndpoint->mpAdapter, FALSE);
 
 exit:
     g_list_free_full(objects, g_object_unref);
@@ -1322,6 +1302,99 @@ exit:
     return;
 }
 
+static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
+{
+    // TODO: right now we do not handle addition/removal of adapters
+    // Primary focus here is to handle addition of a device
+    ChipLogDetail(DeviceLayer, "BluezSignalOnObjectAdded");
+    GList * ll;
+    GList * interfaces;
+    // GDBusConnection * conn = nullptr;
+    // GDBusObjectManager * manager;
+
+    interfaces = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
+
+    for (ll = interfaces; ll != nullptr; ll = ll->next)
+    {
+        if (BLUEZ_IS_ADAPTER1(ll->data))
+        {
+            // conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+            // VerifyOrExit(conn != nullptr,
+            //              ChipLogError(DeviceLayer, "FAIL: get bus sync in %s, error: %s", __func__, error->message));
+
+            // BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
+            // VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
+
+            // ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
+            // endpoint->mpAdapter = nullptr;
+
+            // bluezObjectsSetup(endpoint);
+            // if (!endpoint->mIsCentral)
+            // {
+            //     endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
+            //     endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
+            //     g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
+
+            //     BluezPeripheralObjectsSetup(endpoint);
+            // }
+
+            // manager = g_dbus_object_manager_client_new_sync(
+            //     conn, G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE, BLUEZ_INTERFACE, "/", bluez_object_manager_client_get_proxy_type,
+            //     nullptr /* unused user data in the Proxy Type Func */, nullptr /*destroy notify */, nullptr /* cancellable */,
+            //     nullptr /*&error*/);
+
+            // // VerifyOrExit(manager != nullptr,
+            // //              ChipLogError(DeviceLayer, "FAIL: Error getting object manager client: %s", error->message));
+
+            // endpoint->mpObjMgr = manager;
+
+            // // bluezObjectsSetup(endpoint);
+            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(ll->data);
+            char * addr             = const_cast<char *>(bluez_adapter1_get_name(adapter));
+            ChipLogDetail(DeviceLayer, "BluezSignalOnObjectAdded: %s ", addr);
+            BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(true, nullptr);
+        }
+    }
+
+    BluezDevice1 * device = bluez_object_get_device1(BLUEZ_OBJECT(aObject));
+    if (device == nullptr)
+    {
+        ChipLogDetail(DeviceLayer, "BluezSignalOnObjectAdded device == nullptr");
+        return;
+    }
+
+    if (BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
+    {
+        ChipLogDetail(DeviceLayer, "BluezHandleNewDevice");
+        BluezHandleNewDevice(device, endpoint);
+    }
+
+    g_object_unref(device);
+}
+
+static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, gpointer apClosure)
+{
+    // TODO: for Device1, lookup connection, and call otPlatTobleHandleDisconnected
+    // for Adapter1: unclear, crash if this pertains to our adapter? at least null out the endpoint->mpAdapter.
+    // for Characteristic1, or GattService -- handle here via calling otPlatTobleHandleDisconnected, or ignore.
+
+    GList * ll;
+    GList * interfaces;
+
+    interfaces = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
+
+    for (ll = interfaces; ll != nullptr; ll = ll->next)
+    {
+        if (BLUEZ_IS_ADAPTER1(ll->data))
+        {
+            BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+            // g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpAdvPath);
+            // g_dbus_object_manager_server_unexport(endpoint->mpRoot, endpoint->mpServicePath);
+            g_object_unref(endpoint->mpRoot);
+        }
+    }
+}
+
 static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
 {
     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
@@ -1502,6 +1575,7 @@ CHIP_ERROR StopBluezAdv(BluezEndpoint * apEndpoint)
 
 CHIP_ERROR BluezAdvertisementSetup(BluezEndpoint * apEndpoint)
 {
+    ChipLogDetail(DeviceLayer, "BluezAdvertisementSetup");
     CHIP_ERROR err = PlatformMgrImpl().GLibMatterContextInvokeSync(BluezAdvSetup, apEndpoint);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_ERROR_INCORRECT_STATE,
                         ChipLogError(Ble, "Failed to schedule BluezAdvSetup() on CHIPoBluez thread"));
@@ -1510,6 +1584,7 @@ CHIP_ERROR BluezAdvertisementSetup(BluezEndpoint * apEndpoint)
 
 CHIP_ERROR BluezGattsAppRegister(BluezEndpoint * apEndpoint)
 {
+    ChipLogDetail(DeviceLayer, "BluezGattsAppRegister");
     CHIP_ERROR err = PlatformMgrImpl().GLibMatterContextInvokeSync(BluezPeripheralRegisterApp, apEndpoint);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_ERROR_INCORRECT_STATE,
                         ChipLogError(Ble, "Failed to schedule BluezPeripheralRegisterApp() on CHIPoBluez thread"));

@@ -317,6 +317,18 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
         mFlags.Set(Flags::kAppRegistered);
         controlOpComplete = true;
         break;
+    case DeviceEventType::kPlatformLinuxBLEPeripheralInterfaceConnect:
+        ChipLogDetail(DeviceLayer, "kPlatformLinuxBLEPeripheralInterfaceConnect");
+        VerifyOrExit(apEvent->Platform.BLEPeripheralInterfaceConnect.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
+        mFlags.Clear(Flags::kAppRegistered)
+            .Clear(Flags::kAdvertisingConfigured)
+            .Clear(Flags::kAdvertising)
+            .Clear(Flags::kBluezBLELayerInitialized);
+
+        mFlags.Set(Flags::kAdvertisingRefreshNeeded);
+
+        DriveBLEState();
+        break;
     default:
         break;
     }
@@ -577,6 +589,7 @@ void BLEManagerImpl::DriveBLEState()
     // Perform any initialization actions that must occur after the Chip task is running.
     if (!mFlags.Has(Flags::kAsyncInitCompleted))
     {
+        ChipLogDetail(DeviceLayer, "Tutaj");
         mFlags.Set(Flags::kAsyncInitCompleted);
         ExitNow();
     }
@@ -587,6 +600,7 @@ void BLEManagerImpl::DriveBLEState()
     // Initializes the Bluez BLE layer if needed.
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kBluezBLELayerInitialized))
     {
+        ChipLogDetail(DeviceLayer, "Tutaj1");
         err = InitBluezBleLayer(mIsCentral, nullptr, mBLEAdvConfig, mpEndpoint);
         SuccessOrExit(err);
         mFlags.Set(Flags::kBluezBLELayerInitialized);
@@ -595,6 +609,7 @@ void BLEManagerImpl::DriveBLEState()
     // Register the CHIPoBLE application with the Bluez BLE layer if needed.
     if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered))
     {
+        ChipLogDetail(DeviceLayer, "Tutaj2");
         err = BluezGattsAppRegister(mpEndpoint);
         SuccessOrExit(err);
         mFlags.Set(Flags::kControlOpInProgress);
@@ -604,10 +619,12 @@ void BLEManagerImpl::DriveBLEState()
     // If the application has enabled CHIPoBLE and BLE advertising...
     if (mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && mFlags.Has(Flags::kAdvertisingEnabled))
     {
+        ChipLogDetail(DeviceLayer, "Tutaj3");
         // Start/re-start advertising if not already advertising, or if the advertising state of the
         // Bluez BLE layer needs to be refreshed.
         if (!mFlags.Has(Flags::kAdvertising) || mFlags.Has(Flags::kAdvertisingRefreshNeeded))
         {
+            ChipLogDetail(DeviceLayer, "Tutaj4");
             mFlags.Clear(Flags::kAdvertisingRefreshNeeded);
 
             // Configure advertising data if it hasn't been done yet.  This is an asynchronous step which
@@ -615,6 +632,7 @@ void BLEManagerImpl::DriveBLEState()
             // be called again, and execution will proceed to the code below.
             if (!mFlags.Has(Flags::kAdvertisingConfigured))
             {
+                ChipLogDetail(DeviceLayer, "Tutaj5");
                 err = BluezAdvertisementSetup(mpEndpoint);
                 ExitNow();
             }
@@ -633,6 +651,7 @@ void BLEManagerImpl::DriveBLEState()
     {
         if (mFlags.Has(Flags::kAdvertising))
         {
+            ChipLogDetail(DeviceLayer, "Tutaj6");
             err = StopBLEAdvertising();
             SuccessOrExit(err);
             mFlags.Set(Flags::kControlOpInProgress);
@@ -743,6 +762,15 @@ void BLEManagerImpl::NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, voi
     event.Type                                                 = DeviceEventType::kPlatformLinuxBLEPeripheralRegisterAppComplete;
     event.Platform.BLEPeripheralRegisterAppComplete.mIsSuccess = aIsSuccess;
     event.Platform.BLEPeripheralRegisterAppComplete.mpAppstate = apAppstate;
+    PlatformMgr().PostEventOrDie(&event);
+}
+
+void BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(bool aIsSuccess, void * apAppstate)
+{
+    ChipDeviceEvent event;
+    event.Type                                              = DeviceEventType::kPlatformLinuxBLEPeripheralInterfaceConnect;
+    event.Platform.BLEPeripheralInterfaceConnect.mIsSuccess = aIsSuccess;
+    event.Platform.BLEPeripheralInterfaceConnect.mpAppstate = apAppstate;
     PlatformMgr().PostEventOrDie(&event);
 }
 
