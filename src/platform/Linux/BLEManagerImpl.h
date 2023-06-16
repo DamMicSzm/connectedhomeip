@@ -93,6 +93,8 @@ public:
     static void HandleTXComplete(BLE_CONNECTION_OBJECT user_data);
 
     static void NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, void * apAppstate);
+    static void NotifyBLEPeripheralSetupComplete(bool aIsSuccess, void * apAppstate);
+    static void NotifyBLEPeripheralAdvConfiguredComplete(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralAdvStartComplete(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralAdvStopComplete(bool aIsSuccess, void * apAppstate);
 

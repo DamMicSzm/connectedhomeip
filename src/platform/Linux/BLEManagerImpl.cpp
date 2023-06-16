@@ -302,6 +302,13 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
         mFlags.Set(Flags::kAppRegistered);
         controlOpComplete = true;
         break;
+    case DeviceEventType::kPlatformLinuxBLEPeripheralSetupComplete:
+        ChipLogDetail(DeviceLayer, "kPlatformLinuxBLEPeripheralSetupComplete");
+        VerifyOrExit(apEvent->Platform.BLEPeripheralSetupComplete.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
+        mFlags.Clear(Flags::kAppRegistered).Clear(Flags::kAdvertisingConfigured).Clear(Flags::kAdvertising);
+
+        DriveBLEState();
+        break;
     default:
         break;
     }
@@ -725,6 +732,15 @@ void BLEManagerImpl::NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, voi
     event.Type                                                 = DeviceEventType::kPlatformLinuxBLEPeripheralRegisterAppComplete;
     event.Platform.BLEPeripheralRegisterAppComplete.mIsSuccess = aIsSuccess;
     event.Platform.BLEPeripheralRegisterAppComplete.mpAppstate = apAppstate;
+    PlatformMgr().PostEventOrDie(&event);
+}
+
+void BLEManagerImpl::NotifyBLEPeripheralSetupComplete(bool aIsSuccess, void * apAppstate)
+{
+    ChipDeviceEvent event;
+    event.Type                                           = DeviceEventType::kPlatformLinuxBLEPeripheralSetupComplete;
+    event.Platform.BLEPeripheralSetupComplete.mIsSuccess = aIsSuccess;
+    event.Platform.BLEPeripheralSetupComplete.mpAppstate = apAppstate;
     PlatformMgr().PostEventOrDie(&event);
 }
 
