@@ -320,12 +320,9 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
     case DeviceEventType::kPlatformLinuxBLEPeripheralInterfaceConnect:
         ChipLogDetail(DeviceLayer, "kPlatformLinuxBLEPeripheralInterfaceConnect");
         VerifyOrExit(apEvent->Platform.BLEPeripheralInterfaceConnect.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
-        mFlags.Clear(Flags::kAppRegistered)
-            .Clear(Flags::kAdvertisingConfigured)
-            .Clear(Flags::kAdvertising)
-            .Clear(Flags::kBluezBLELayerInitialized);
+        mFlags.Clear(Flags::kAppRegistered).Clear(Flags::kAdvertisingConfigured).Clear(Flags::kAdvertising);
 
-        mFlags.Set(Flags::kAdvertisingRefreshNeeded);
+        // mFlags.Set(Flags::kAdvertisingRefreshNeeded);
 
         DriveBLEState();
         break;
