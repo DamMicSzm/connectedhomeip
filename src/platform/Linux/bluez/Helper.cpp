@@ -1302,6 +1302,30 @@ exit:
     return;
 }
 
+static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
+{
+    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+    VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
+
+    ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
+
+    endpoint->mpAdapter = nullptr;
+
+    if (!endpoint->mIsCentral)
+    {
+        endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
+        endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
+        g_dbus_object_manager_server_set_connection(endpoint->mpRoot, aConn);
+
+        BluezPeripheralObjectsSetup(endpoint);
+    }
+
+    bluezObjectsSetup(endpoint);
+
+exit:
+    return;
+}
+
 static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
 {
     // TODO: right now we do not handle addition/removal of adapters
@@ -1310,6 +1334,7 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
     GList * ll;
     GList * interfaces;
     GDBusConnection * conn = nullptr;
+    char * expectedPath;
 
     interfaces = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
 
@@ -1317,32 +1342,17 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
     {
         if (BLUEZ_IS_ADAPTER1(ll->data))
         {
-            // conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
-            // VerifyOrExit(conn != nullptr,
-            //              ChipLogError(DeviceLayer, "FAIL: get bus sync in %s, error: %s", __func__, error->message));
-
-            // BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
-            // VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
-
-            // ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
-            endpoint->mpAdapter = nullptr;
-            conn                = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
-
-            if (!endpoint->mIsCentral)
-            {
-                endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
-                endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
-                g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
-
-                BluezPeripheralObjectsSetup(endpoint);
-            }
-
-            bluezObjectsSetup(endpoint);
-            // bluezObjectsSetup(endpoint);
             BluezAdapter1 * adapter = BLUEZ_ADAPTER1(ll->data);
-            char * addr             = const_cast<char *>(bluez_adapter1_get_name(adapter));
-            ChipLogDetail(DeviceLayer, "BluezSignalOnObjectAdded: %s ", addr);
-            BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(true, nullptr);
+            expectedPath            = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
+
+            if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
+            {
+                conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+
+                BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
+                BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(true, nullptr);
+                ChipLogDetail(DeviceLayer, "Device Added: %s ", expectedPath);
+            }
         }
     }
 
@@ -1359,12 +1369,13 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
         BluezHandleNewDevice(device, endpoint);
     }
 
-    g_object_unref(device);
-    g_list_free(ll);
-    g_list_free(interfaces);
+    // g_object_unref(device);
+    g_list_free_full(ll, g_object_unref);
+    g_list_free_full(interfaces, g_object_unref);
+    // g_free(expectedPath);
 }
 
-static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, gpointer apClosure)
+static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
 {
     // TODO: for Device1, lookup connection, and call otPlatTobleHandleDisconnected
     // for Adapter1: unclear, crash if this pertains to our adapter? at least null out the endpoint->mpAdapter.
@@ -1372,41 +1383,30 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
 
     GList * ll;
     GList * interfaces;
+    char * expectedPath;
 
     interfaces = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
-    ChipLogDetail(DeviceLayer, "BluezSignalOnObjectRemoved device == nullptr");
+    ChipLogDetail(DeviceLayer, "BluezSignalOnObjectRemoved");
     for (ll = interfaces; ll != nullptr; ll = ll->next)
     {
         if (BLUEZ_IS_ADAPTER1(ll->data))
         {
-            ChipLogDetail(DeviceLayer, "BluezSignalOnObjectRemoved device == nullptr");
-            BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
+            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(ll->data);
+            expectedPath            = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
 
-            endpoint->mIsAdvertising = false;
-            g_object_unref(endpoint->mpRoot);
+            if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
+            {
+                ChipLogDetail(DeviceLayer, "Device Removed: %s", expectedPath);
+
+                endpoint->mIsAdvertising = false;
+                g_object_unref(endpoint->mpRoot);
+            }
         }
     }
+    g_list_free_full(ll, g_object_unref);
+    g_list_free_full(interfaces, g_object_unref);
+    // g_free(expectedPath);
 }
-
-// static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
-// {
-//     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
-//     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
-
-//     ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
-
-//     if (!endpoint->mIsCentral)
-//     {
-//         endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
-//         endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
-//         g_dbus_object_manager_server_set_connection(endpoint->mpRoot, aConn);
-
-//         BluezPeripheralObjectsSetup(apClosure);
-//     }
-
-// exit:
-//     return;
-// }
 
 #if CHIP_BLUEZ_NAME_MONITOR
 static void BluezOnNameAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
@@ -1435,17 +1435,6 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     else
         endpoint->mpOwningName = g_strdup_printf("C-%04x", getpid() & 0xffff);
 
-    // BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
-
-    if (!endpoint->mIsCentral)
-    {
-        endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
-        endpoint->mpRoot     = g_dbus_object_manager_server_new(endpoint->mpRootPath);
-        g_dbus_object_manager_server_set_connection(endpoint->mpRoot, conn);
-
-        BluezPeripheralObjectsSetup(endpoint);
-    }
-
     manager = g_dbus_object_manager_client_new_sync(
         conn, G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE, BLUEZ_INTERFACE, "/", bluez_object_manager_client_get_proxy_type,
         nullptr /* unused user data in the Proxy Type Func */, nullptr /*destroy notify */, nullptr /* cancellable */, &error);
@@ -1454,7 +1443,7 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
 
     endpoint->mpObjMgr = manager;
 
-    bluezObjectsSetup(endpoint);
+    BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
 
     g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
