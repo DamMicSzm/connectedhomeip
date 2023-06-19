@@ -269,7 +269,6 @@ exit:
 
 static CHIP_ERROR BluezAdvStart(BluezEndpoint * endpoint)
 {
-    ChipLogDetail(DeviceLayer, "BluezAdvStart");
     GDBusObject * adapter;
     BluezLEAdvertisingManager1 * advMgr = nullptr;
     GVariantBuilder optionsBuilder;
@@ -1302,9 +1301,8 @@ exit:
     return;
 }
 
-static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, gpointer apClosure)
+static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, BluezEndpoint * endpoint)
 {
-    BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
 
     ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
@@ -1330,7 +1328,6 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
 {
     // TODO: right now we do not handle addition/removal of adapters
     // Primary focus here is to handle addition of a device
-    ChipLogDetail(DeviceLayer, "BluezSignalOnObjectAdded");
     GList * ll;
     GList * interfaces;
     GDBusConnection * conn = nullptr;
@@ -1350,8 +1347,7 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
                 conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
 
                 BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
-                BLEManagerImpl::NotifyBLEPeripheralInterfaceConnect(true, nullptr);
-                ChipLogDetail(DeviceLayer, "Device Added: %s ", expectedPath);
+                BLEManagerImpl::NotifyBLEPeripheralAdapterConnect(true, nullptr);
             }
         }
     }
@@ -1359,20 +1355,17 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
     BluezDevice1 * device = bluez_object_get_device1(BLUEZ_OBJECT(aObject));
     if (device == nullptr)
     {
-        ChipLogDetail(DeviceLayer, "BluezSignalOnObjectAdded device == nullptr");
         return;
     }
 
+    // Does this have a special task? Should do what is done above?
     if (BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
     {
-        ChipLogDetail(DeviceLayer, "BluezHandleNewDevice");
         BluezHandleNewDevice(device, endpoint);
     }
 
-    // g_object_unref(device);
     g_list_free_full(ll, g_object_unref);
     g_list_free_full(interfaces, g_object_unref);
-    // g_free(expectedPath);
 }
 
 static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
@@ -1386,7 +1379,7 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
     char * expectedPath;
 
     interfaces = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
-    ChipLogDetail(DeviceLayer, "BluezSignalOnObjectRemoved");
+
     for (ll = interfaces; ll != nullptr; ll = ll->next)
     {
         if (BLUEZ_IS_ADAPTER1(ll->data))
@@ -1396,16 +1389,14 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
 
             if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
             {
-                ChipLogDetail(DeviceLayer, "Device Removed: %s", expectedPath);
-
                 endpoint->mIsAdvertising = false;
                 g_object_unref(endpoint->mpRoot);
             }
         }
     }
+
     g_list_free_full(ll, g_object_unref);
     g_list_free_full(interfaces, g_object_unref);
-    // g_free(expectedPath);
 }
 
 #if CHIP_BLUEZ_NAME_MONITOR
@@ -1566,7 +1557,6 @@ CHIP_ERROR StopBluezAdv(BluezEndpoint * apEndpoint)
 
 CHIP_ERROR BluezAdvertisementSetup(BluezEndpoint * apEndpoint)
 {
-    ChipLogDetail(DeviceLayer, "BluezAdvertisementSetup");
     CHIP_ERROR err = PlatformMgrImpl().GLibMatterContextInvokeSync(BluezAdvSetup, apEndpoint);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_ERROR_INCORRECT_STATE,
                         ChipLogError(Ble, "Failed to schedule BluezAdvSetup() on CHIPoBluez thread"));
@@ -1575,7 +1565,6 @@ CHIP_ERROR BluezAdvertisementSetup(BluezEndpoint * apEndpoint)
 
 CHIP_ERROR BluezGattsAppRegister(BluezEndpoint * apEndpoint)
 {
-    ChipLogDetail(DeviceLayer, "BluezGattsAppRegister");
     CHIP_ERROR err = PlatformMgrImpl().GLibMatterContextInvokeSync(BluezPeripheralRegisterApp, apEndpoint);
     VerifyOrReturnError(err == CHIP_NO_ERROR, CHIP_ERROR_INCORRECT_STATE,
                         ChipLogError(Ble, "Failed to schedule BluezPeripheralRegisterApp() on CHIPoBluez thread"));
