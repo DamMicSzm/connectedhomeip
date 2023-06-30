@@ -1000,6 +1000,7 @@ static void bluezObjectsSetup(BluezEndpoint * apEndpoint)
 
     expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, apEndpoint->mAdapterId);
     objects      = g_dbus_object_manager_get_objects(apEndpoint->mpObjMgr);
+    // apEndpoint->mpAdapter = nullptr;
 
     for (l = objects; l != nullptr && apEndpoint->mpAdapter == nullptr; l = l->next)
     {
@@ -1035,14 +1036,14 @@ static void bluezObjectsSetup(BluezEndpoint * apEndpoint)
 
     VerifyOrExit(apEndpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL apEndpoint->mpAdapter in %s", __func__));
 
-    if (bluez_adapter1_get_powered(apEndpoint->mpAdapter) != TRUE)
-        bluez_adapter1_set_powered(apEndpoint->mpAdapter, TRUE);
+    // if (bluez_adapter1_get_powered(apEndpoint->mpAdapter) != TRUE)
+    bluez_adapter1_set_powered(apEndpoint->mpAdapter, TRUE);
 
     // Setting "Discoverable" to False on the adapter and to True on the advertisement convinces
     // Bluez to set "BR/EDR Not Supported" flag. Bluez doesn't provide API to do that explicitly
     // and the flag is necessary to force using LE transport.
-    if (bluez_adapter1_get_discoverable(apEndpoint->mpAdapter) != FALSE)
-        bluez_adapter1_set_discoverable(apEndpoint->mpAdapter, FALSE);
+    // if (bluez_adapter1_get_discoverable(apEndpoint->mpAdapter) != FALSE)
+    bluez_adapter1_set_discoverable(apEndpoint->mpAdapter, FALSE);
 
 exit:
     g_list_free_full(objects, g_object_unref);
@@ -1306,9 +1307,6 @@ static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, Blu
     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
 
     ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
-
-    endpoint->mpAdapter = nullptr;
-
     if (!endpoint->mIsCentral)
     {
         endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
@@ -1326,77 +1324,74 @@ exit:
 
 static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
 {
-    // TODO: right now we do not handle addition/removal of adapters
-    // Primary focus here is to handle addition of a device
-    GList * ll;
     GList * interfaces;
-    GDBusConnection * conn = nullptr;
     char * expectedPath;
 
-    interfaces = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
+    interfaces   = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
+    expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
 
-    for (ll = interfaces; ll != nullptr; ll = ll->next)
+    for (GList * iface = interfaces; iface != nullptr; iface = iface->next)
     {
-        if (BLUEZ_IS_ADAPTER1(ll->data))
+        if (BLUEZ_IS_ADAPTER1(iface->data))
         {
-            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(ll->data);
-            expectedPath            = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
+            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(iface->data);
 
             if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
             {
-                conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+                GDBusConnection * conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
 
                 BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
                 BLEManagerImpl::NotifyBLEPeripheralAdapterConnect(true, nullptr);
+
+                g_object_unref(conn);
             }
+
+            g_object_unref(adapter);
         }
     }
 
     BluezDevice1 * device = bluez_object_get_device1(BLUEZ_OBJECT(aObject));
-    if (device == nullptr)
-    {
-        return;
-    }
 
     // Does this have a special task? Should do what is done above?
-    if (BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
+    if (device != nullptr && BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
     {
+        ChipLogDetail(DeviceLayer, "Tutaj1 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         BluezHandleNewDevice(device, endpoint);
     }
 
-    g_list_free_full(ll, g_object_unref);
-    g_list_free_full(interfaces, g_object_unref);
+    if (device != nullptr)
+        g_object_unref(device);
+    g_free(expectedPath);
+    g_list_free(interfaces);
 }
 
 static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
 {
-    // TODO: for Device1, lookup connection, and call otPlatTobleHandleDisconnected
-    // for Adapter1: unclear, crash if this pertains to our adapter? at least null out the endpoint->mpAdapter.
-    // for Characteristic1, or GattService -- handle here via calling otPlatTobleHandleDisconnected, or ignore.
-
-    GList * ll;
     GList * interfaces;
     char * expectedPath;
 
-    interfaces = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
+    interfaces   = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
+    expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
 
-    for (ll = interfaces; ll != nullptr; ll = ll->next)
+    for (GList * iface = interfaces; iface != nullptr; iface = iface->next)
     {
-        if (BLUEZ_IS_ADAPTER1(ll->data))
+        if (BLUEZ_IS_ADAPTER1(iface->data))
         {
-            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(ll->data);
-            expectedPath            = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
+            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(iface->data);
 
             if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
             {
                 endpoint->mIsAdvertising = false;
+                g_object_unref(endpoint->mpAdapter);
                 g_object_unref(endpoint->mpRoot);
             }
+
+            g_object_unref(adapter);
         }
     }
 
-    g_list_free_full(ll, g_object_unref);
-    g_list_free_full(interfaces, g_object_unref);
+    g_free(expectedPath);
+    g_list_free(interfaces);
 }
 
 #if CHIP_BLUEZ_NAME_MONITOR
