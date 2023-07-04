@@ -1000,7 +1000,6 @@ static void bluezObjectsSetup(BluezEndpoint * apEndpoint)
 
     expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, apEndpoint->mAdapterId);
     objects      = g_dbus_object_manager_get_objects(apEndpoint->mpObjMgr);
-    // apEndpoint->mpAdapter = nullptr;
 
     for (l = objects; l != nullptr && apEndpoint->mpAdapter == nullptr; l = l->next)
     {
@@ -1345,8 +1344,6 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
 
                 g_object_unref(conn);
             }
-
-            g_object_unref(adapter);
         }
     }
 
@@ -1362,7 +1359,7 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
     if (device != nullptr)
         g_object_unref(device);
     g_free(expectedPath);
-    g_list_free(interfaces);
+    g_list_free_full(interfaces, g_object_unref);
 }
 
 static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
@@ -1383,15 +1380,15 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
             {
                 endpoint->mIsAdvertising = false;
                 g_object_unref(endpoint->mpAdapter);
+                endpoint->mpAdapter = nullptr;
                 g_object_unref(endpoint->mpRoot);
+                endpoint->mpRoot = nullptr;
             }
-
-            g_object_unref(adapter);
         }
     }
 
     g_free(expectedPath);
-    g_list_free(interfaces);
+    g_list_free_full(interfaces, g_object_unref);
 }
 
 #if CHIP_BLUEZ_NAME_MONITOR
