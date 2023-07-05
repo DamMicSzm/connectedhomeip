@@ -1035,13 +1035,11 @@ static void bluezObjectsSetup(BluezEndpoint * apEndpoint)
 
     VerifyOrExit(apEndpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL apEndpoint->mpAdapter in %s", __func__));
 
-    // if (bluez_adapter1_get_powered(apEndpoint->mpAdapter) != TRUE)
     bluez_adapter1_set_powered(apEndpoint->mpAdapter, TRUE);
 
     // Setting "Discoverable" to False on the adapter and to True on the advertisement convinces
     // Bluez to set "BR/EDR Not Supported" flag. Bluez doesn't provide API to do that explicitly
     // and the flag is necessary to force using LE transport.
-    // if (bluez_adapter1_get_discoverable(apEndpoint->mpAdapter) != FALSE)
     bluez_adapter1_set_discoverable(apEndpoint->mpAdapter, FALSE);
 
 exit:
@@ -1301,11 +1299,10 @@ exit:
     return;
 }
 
-static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, BluezEndpoint * endpoint)
+static void BluezOnAdapterPrepared(GDBusConnection * aConn, const gchar * aName, BluezEndpoint * endpoint)
 {
     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
 
-    ChipLogDetail(DeviceLayer, "TRACE: Bus acquired for name %s", aName);
     if (!endpoint->mIsCentral)
     {
         endpoint->mpRootPath = g_strdup_printf("/chipoble/%04x", getpid() & 0xffff);
@@ -1314,8 +1311,6 @@ static void BluezOnBusAcquired(GDBusConnection * aConn, const gchar * aName, Blu
 
         BluezPeripheralObjectsSetup(endpoint);
     }
-
-    bluezObjectsSetup(endpoint);
 
 exit:
     return;
@@ -1338,9 +1333,11 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
             if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
             {
                 GDBusConnection * conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+                BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
 
-                BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
-                BLEManagerImpl::NotifyBLEPeripheralAdapterConnect(true, nullptr);
+                endpoint->mpAdapter = static_cast<BluezAdapter1 *>(g_object_ref(adapter));
+                bluezObjectsSetup(endpoint);
+                BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
 
                 g_object_unref(conn);
             }
@@ -1349,10 +1346,8 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
 
     BluezDevice1 * device = bluez_object_get_device1(BLUEZ_OBJECT(aObject));
 
-    // Does this have a special task? Should do what is done above?
     if (device != nullptr && BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
     {
-        ChipLogDetail(DeviceLayer, "Tutaj1 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         BluezHandleNewDevice(device, endpoint);
     }
 
@@ -1379,8 +1374,10 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
             if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
             {
                 endpoint->mIsAdvertising = false;
+
                 g_object_unref(endpoint->mpAdapter);
                 endpoint->mpAdapter = nullptr;
+
                 g_object_unref(endpoint->mpRoot);
                 endpoint->mpRoot = nullptr;
             }
@@ -1426,11 +1423,13 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
 
     endpoint->mpObjMgr = manager;
 
-    BluezOnBusAcquired(conn, endpoint->mpOwningName, endpoint);
-
     g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
     g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
+
+    BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
+    bluezObjectsSetup(endpoint);
+    BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
 
 exit:
     if (error != nullptr)
