@@ -192,6 +192,7 @@ static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint
     BLEManagerImpl::NotifyBLEPeripheralAdvConfiguredComplete(true, nullptr);
 
 exit:
+
     g_free(localName);
     return adv;
 }
@@ -1320,6 +1321,7 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
 {
     GList * interfaces;
     char * expectedPath;
+    BluezDevice1 * device;
 
     interfaces   = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
     expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
@@ -1336,23 +1338,25 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
                 BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
 
                 endpoint->mpAdapter = static_cast<BluezAdapter1 *>(g_object_ref(adapter));
-                bluezObjectsSetup(endpoint);
                 BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
 
                 g_object_unref(conn);
+
+                ExitNow();
             }
         }
     }
 
-    BluezDevice1 * device = bluez_object_get_device1(BLUEZ_OBJECT(aObject));
+    device = bluez_object_get_device1(BLUEZ_OBJECT(aObject));
 
-    if (device != nullptr && BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
+    if (endpoint->mIsCentral && device != nullptr && BluezIsDeviceOnAdapter(device, endpoint->mpAdapter) == TRUE)
     {
         BluezHandleNewDevice(device, endpoint);
     }
 
     if (device != nullptr)
         g_object_unref(device);
+exit:
     g_free(expectedPath);
     g_list_free_full(interfaces, g_object_unref);
 }
