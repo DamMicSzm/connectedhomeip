@@ -1384,6 +1384,9 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
 
                 g_object_unref(endpoint->mpRoot);
                 endpoint->mpRoot = nullptr;
+
+                g_free(endpoint->mpRootPath);
+                endpoint->mpRootPath = nullptr;
             }
         }
     }
