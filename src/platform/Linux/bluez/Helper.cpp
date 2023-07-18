@@ -921,6 +921,10 @@ static void BluezSignalInterfacePropertiesChanged(GDBusObjectManagerClient * aMa
                                                   GDBusProxy * aInterface, GVariant * aChangedProperties,
                                                   const gchar * const * aInvalidatedProps, gpointer apClosure)
 {
+    const char * path = g_dbus_object_get_object_path(G_DBUS_OBJECT(aObject));
+    ChipLogError(DeviceLayer, "ZZZZZZZZZZ BluezSignalPropCHanges: %s", path);
+    ChipLogError(DeviceLayer, "ZZZZZZZZZZ BluezSignalPropCHanges: %s", g_variant_print(aChangedProperties, TRUE));
+
     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
     VerifyOrReturn(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
     VerifyOrReturn(endpoint->mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL endpoint->mpAdapter in %s", __func__));
@@ -1323,11 +1327,18 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
     char * expectedPath;
     BluezDevice1 * device;
 
+    // get path of the object
+    const char * path = g_dbus_object_get_object_path(aObject);
+    ChipLogError(DeviceLayer, "YYYYYYYYYYYY BluezSignalOnObjectAdded: %s", path);
+
     interfaces   = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
     expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
 
-    for (GList * iface = interfaces; iface != nullptr; iface = iface->next)
+    for (GList * iface = interfaces; iface != nullptr; iface = g_list_next(iface))
     {
+        auto * info = g_dbus_interface_get_info(G_DBUS_INTERFACE(iface->data));
+        // XXX: Why into is NULL sometimes?
+        ChipLogError(DeviceLayer, "NAME: %s", info ? info->name : "NULL");
         if (BLUEZ_IS_ADAPTER1(iface->data))
         {
             BluezAdapter1 * adapter = BLUEZ_ADAPTER1(iface->data);
@@ -1365,6 +1376,10 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
 {
     GList * interfaces;
     char * expectedPath;
+
+    // get path of the object
+    const char * path = g_dbus_object_get_object_path(aObject);
+    ChipLogError(DeviceLayer, "XXXXXXXXXXXXXXXXXXXXXXXX BluezSignalOnObjectRemoved: %s", path);
 
     interfaces   = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
     expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
