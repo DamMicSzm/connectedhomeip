@@ -1449,8 +1449,8 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
     g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
 
-    BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
     bluezObjectsSetup(endpoint);
+    BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
     BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
 
 exit:
