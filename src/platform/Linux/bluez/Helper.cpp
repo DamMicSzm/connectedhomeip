@@ -1344,7 +1344,6 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
             auto * info = g_dbus_interface_get_info(G_DBUS_INTERFACE(interface));
             // XXX: Why into is NULL sometimes?
             ChipLogError(DeviceLayer, "NAME: %s", info ? info->name : "NULL");
-
             BluezAdapter1 * adapter = BLUEZ_ADAPTER1(interface);
 
             GDBusConnection * conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
@@ -1401,6 +1400,9 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
 
             g_free(endpoint->mpRootPath);
             endpoint->mpRootPath = nullptr;
+
+            g_free(endpoint->mpServicePath);
+            endpoint->mpServicePath = nullptr;
         }
         g_object_unref(interface);
     }
