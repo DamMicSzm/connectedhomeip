@@ -923,7 +923,9 @@ static void BluezSignalInterfacePropertiesChanged(GDBusObjectManagerClient * aMa
 {
     const char * path = g_dbus_object_get_object_path(G_DBUS_OBJECT(aObject));
     ChipLogError(DeviceLayer, "ZZZZZZZZZZ BluezSignalPropCHanges: %s", path);
-    ChipLogError(DeviceLayer, "ZZZZZZZZZZ BluezSignalPropCHanges: %s", g_variant_print(aChangedProperties, TRUE));
+    char * var_print = g_variant_print(aChangedProperties, TRUE);
+    ChipLogError(DeviceLayer, "ZZZZZZZZZZ BluezSignalPropCHanges: %s", var_print);
+    g_free(var_print);
 
     BluezEndpoint * endpoint = static_cast<BluezEndpoint *>(apClosure);
     VerifyOrReturn(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
@@ -1323,38 +1325,37 @@ exit:
 
 static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
 {
-    GList * interfaces;
-    char * expectedPath;
+    GDBusInterface * interface = nullptr;
     BluezDevice1 * device;
 
     // get path of the object
     const char * path = g_dbus_object_get_object_path(aObject);
     ChipLogError(DeviceLayer, "YYYYYYYYYYYY BluezSignalOnObjectAdded: %s", path);
 
-    interfaces   = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
-    expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
+    char * expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
 
-    for (GList * iface = interfaces; iface != nullptr; iface = g_list_next(iface))
+    if (strcmp(path, expectedPath) == 0)
     {
-        auto * info = g_dbus_interface_get_info(G_DBUS_INTERFACE(iface->data));
-        // XXX: Why into is NULL sometimes?
-        ChipLogError(DeviceLayer, "NAME: %s", info ? info->name : "NULL");
-        if (BLUEZ_IS_ADAPTER1(iface->data))
+        // get interface ADAPTER_INTERFACE
+        interface = g_dbus_object_get_interface(G_DBUS_OBJECT(aObject), ADAPTER_INTERFACE);
+
+        if (interface != nullptr && BLUEZ_IS_ADAPTER1(interface))
         {
-            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(iface->data);
+            auto * info = g_dbus_interface_get_info(G_DBUS_INTERFACE(interface));
+            // XXX: Why into is NULL sometimes?
+            ChipLogError(DeviceLayer, "NAME: %s", info ? info->name : "NULL");
 
-            if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
-            {
-                GDBusConnection * conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
-                BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
+            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(interface);
 
-                endpoint->mpAdapter = static_cast<BluezAdapter1 *>(g_object_ref(adapter));
-                BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
+            GDBusConnection * conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, nullptr);
+            BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
 
-                g_object_unref(conn);
+            endpoint->mpAdapter = static_cast<BluezAdapter1 *>(g_object_ref(adapter));
+            BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
 
-                ExitNow();
-            }
+            g_object_unref(conn);
+
+            ExitNow();
         }
     }
 
@@ -1369,45 +1370,42 @@ static void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject 
         g_object_unref(device);
 exit:
     g_free(expectedPath);
-    g_list_free_full(interfaces, g_object_unref);
 }
 
 static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject, BluezEndpoint * endpoint)
 {
-    GList * interfaces;
-    char * expectedPath;
+    GDBusInterface * interface = nullptr;
 
     // get path of the object
     const char * path = g_dbus_object_get_object_path(aObject);
     ChipLogError(DeviceLayer, "XXXXXXXXXXXXXXXXXXXXXXXX BluezSignalOnObjectRemoved: %s", path);
 
-    interfaces   = g_dbus_object_get_interfaces(G_DBUS_OBJECT(aObject));
-    expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
+    char * expectedPath = g_strdup_printf("%s/hci%d", BLUEZ_PATH, endpoint->mAdapterId);
 
-    for (GList * iface = interfaces; iface != nullptr; iface = iface->next)
+    if (strcmp(path, expectedPath) == 0)
     {
-        if (BLUEZ_IS_ADAPTER1(iface->data))
+        // get interface ADAPTER_INTERFACE
+        interface = g_dbus_object_get_interface(G_DBUS_OBJECT(aObject), ADAPTER_INTERFACE);
+
+        if (interface != nullptr && BLUEZ_IS_ADAPTER1(interface))
         {
-            BluezAdapter1 * adapter = BLUEZ_ADAPTER1(iface->data);
+            ChipLogDetail(DeviceLayer, "BluezAdapter1 removed");
 
-            if (strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter)), expectedPath) == 0)
-            {
-                endpoint->mIsAdvertising = false;
+            endpoint->mIsAdvertising = false;
 
-                g_object_unref(endpoint->mpAdapter);
-                endpoint->mpAdapter = nullptr;
+            g_object_unref(endpoint->mpAdapter);
+            endpoint->mpAdapter = nullptr;
 
-                g_object_unref(endpoint->mpRoot);
-                endpoint->mpRoot = nullptr;
+            g_object_unref(endpoint->mpRoot);
+            endpoint->mpRoot = nullptr;
 
-                g_free(endpoint->mpRootPath);
-                endpoint->mpRootPath = nullptr;
-            }
+            g_free(endpoint->mpRootPath);
+            endpoint->mpRootPath = nullptr;
         }
+        g_object_unref(interface);
     }
 
     g_free(expectedPath);
-    g_list_free_full(interfaces, g_object_unref);
 }
 
 #if CHIP_BLUEZ_NAME_MONITOR
