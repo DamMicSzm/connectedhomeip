@@ -1453,6 +1453,8 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
     BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
 
+    g_object_unref(manager);
+    g_object_unref(conn);
 exit:
     if (error != nullptr)
         g_error_free(error);
