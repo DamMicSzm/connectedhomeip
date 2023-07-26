@@ -1524,7 +1524,6 @@ CHIP_ERROR GroupDataProviderImpl::SetKeySet(chip::FabricIndex fabric_index, cons
 {
     VerifyOrReturnError(IsInitialized(), CHIP_ERROR_INTERNAL);
 
-    ChipLogDetail(DataManagement, "TUTAJ SetKeySet");
     FabricData fabric(fabric_index);
     KeySetData keyset;
 
@@ -1542,13 +1541,6 @@ CHIP_ERROR GroupDataProviderImpl::SetKeySet(chip::FabricIndex fabric_index, cons
     keyset.operational_keys[0].start_time = in_keyset.epoch_keys[0].start_time;
     keyset.operational_keys[1].start_time = in_keyset.epoch_keys[1].start_time;
     keyset.operational_keys[2].start_time = in_keyset.epoch_keys[2].start_time;
-
-    // ChipLogDetail all value in loop start_time
-    for (int i = 0; i < 3; i++)
-    {
-        ChipLogDetail(DataManagement, "TUTAJ start_time[%i] = %ld", i, keyset.operational_keys[i].start_time);
-        ChipLogDetail(DataManagement, "TUTAJ epoch_keys[%i] = %s", i, in_keyset.epoch_keys[i].key);
-    }
 
     // Store the operational keys and hash instead of the epoch keys
     for (size_t i = 0; i < in_keyset.num_keys_used; ++i)

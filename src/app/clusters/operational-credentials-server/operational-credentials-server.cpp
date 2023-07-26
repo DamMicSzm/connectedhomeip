@@ -599,11 +599,11 @@ bool emberAfOperationalCredentialsClusterAddNOCCallback(app::CommandHandler * co
     auto nonDefaultStatus    = Status::Success;
     bool needRevert          = false;
 
-    CHIP_ERROR err             = CHIP_NO_ERROR;
-    FabricIndex newFabricIndex = kUndefinedFabricIndex;
-    Credentials::GroupDataProvider::KeySet keyset;
-    const FabricInfo * newFabricInfo = nullptr;
-    auto & fabricTable               = Server::GetInstance().GetFabricTable();
+    CHIP_ERROR err                                = CHIP_NO_ERROR;
+    FabricIndex newFabricIndex                    = kUndefinedFabricIndex;
+    Credentials::GroupDataProvider::KeySet keyset = {};
+    const FabricInfo * newFabricInfo              = nullptr;
+    auto & fabricTable                            = Server::GetInstance().GetFabricTable();
 
     auto * secureSession   = commandObj->GetExchangeContext()->GetSessionHandle()->AsSecureSession();
     auto & failSafeContext = Server::GetInstance().GetFailSafeContext();
@@ -615,31 +615,23 @@ bool emberAfOperationalCredentialsClusterAddNOCCallback(app::CommandHandler * co
     bool hasPendingKey      = fabricTable.HasPendingOperationalKey(csrWasForUpdateNoc);
 
     ChipLogProgress(Zcl, "OpCreds: Received an AddNOC command");
-    ChipLogDetail(Zcl, "OpCreds: tutaj 1");
+
     VerifyOrExit(NOCValue.size() <= Credentials::kMaxCHIPCertLength, nonDefaultStatus = Status::InvalidCommand);
-    ChipLogDetail(Zcl, "OpCreds: tutaj 2");
     VerifyOrExit(!ICACValue.HasValue() || ICACValue.Value().size() <= Credentials::kMaxCHIPCertLength,
                  nonDefaultStatus = Status::InvalidCommand);
-    ChipLogDetail(Zcl, "OpCreds: tutaj 3");
     VerifyOrExit(ipkValue.size() == Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES, nonDefaultStatus = Status::InvalidCommand);
-    ChipLogDetail(Zcl, "OpCreds: tutaj 4");
     VerifyOrExit(IsVendorIdValidOperationally(adminVendorId), nonDefaultStatus = Status::InvalidCommand);
 
-    ChipLogDetail(Zcl, "OpCreds: tutaj 5");
     VerifyOrExit(failSafeContext.IsFailSafeArmed(commandObj->GetAccessingFabricIndex()),
                  nonDefaultStatus = Status::FailsafeRequired);
 
-    ChipLogDetail(Zcl, "OpCreds: tutaj 6");
     VerifyOrExit(!failSafeContext.NocCommandHasBeenInvoked(), nonDefaultStatus = Status::ConstraintError);
 
     // Must have had a previous CSR request, not tagged for UpdateNOC
-    ChipLogDetail(Zcl, "OpCreds: tutaj 7");
     VerifyOrExit(hasPendingKey, nocResponse = NodeOperationalCertStatusEnum::kMissingCsr);
-    ChipLogDetail(Zcl, "OpCreds: tutaj 8");
     VerifyOrExit(!csrWasForUpdateNoc, nonDefaultStatus = Status::ConstraintError);
 
     // Internal error that would prevent IPK from being added
-    ChipLogDetail(Zcl, "OpCreds: tutaj 9");
     VerifyOrExit(groupDataProvider != nullptr, nonDefaultStatus = Status::Failure);
 
     // Flush acks before really slow work
@@ -648,35 +640,29 @@ bool emberAfOperationalCredentialsClusterAddNOCCallback(app::CommandHandler * co
     // We can't possibly have a matching root based on the fact that we don't have
     // a shared root store. Therefore we would later fail path validation due to
     // missing root. Let's early-bail with InvalidNOC.
-    ChipLogDetail(Zcl, "OpCreds: tutaj 10");
     VerifyOrExit(failSafeContext.AddTrustedRootCertHasBeenInvoked(), nocResponse = NodeOperationalCertStatusEnum::kInvalidNOC);
 
     err = fabricTable.AddNewPendingFabricWithOperationalKeystore(NOCValue, ICACValue.ValueOr(ByteSpan{}), adminVendorId,
                                                                  &newFabricIndex);
-    ChipLogDetail(Zcl, "OpCreds: tutaj 11");
     VerifyOrExit(err == CHIP_NO_ERROR, nocResponse = ConvertToNOCResponseStatus(err));
 
     // From here if we error-out, we should revert the fabric table pending updates
     needRevert = true;
 
     newFabricInfo = fabricTable.FindFabricWithIndex(newFabricIndex);
-    ChipLogDetail(Zcl, "OpCreds: tutaj 12");
     VerifyOrExit(newFabricInfo != nullptr, nonDefaultStatus = Status::Failure);
 
     // Set the Identity Protection Key (IPK)
     // The IPK SHALL be the operational group key under GroupKeySetID of 0
-    keyset.keyset_id                = Credentials::GroupDataProvider::kIdentityProtectionKeySetId;
-    keyset.policy                   = GroupKeyManagement::GroupKeySecurityPolicyEnum::kTrustFirst;
-    keyset.num_keys_used            = 1;
-    keyset.epoch_keys[0].start_time = g_get_real_time();
+    keyset.keyset_id     = Credentials::GroupDataProvider::kIdentityProtectionKeySetId;
+    keyset.policy        = GroupKeyManagement::GroupKeySecurityPolicyEnum::kTrustFirst;
+    keyset.num_keys_used = 1;
     memcpy(keyset.epoch_keys[0].key, ipkValue.data(), Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES);
-    ChipLogDetail(Zcl, "keyset.epoch_keys[0].key: %s", keyset.epoch_keys[0].key);
 
     err = newFabricInfo->GetCompressedFabricIdBytes(compressed_fabric_id);
     VerifyOrExit(err == CHIP_NO_ERROR, nonDefaultStatus = Status::Failure);
 
     err = groupDataProvider->SetKeySet(newFabricIndex, compressed_fabric_id, keyset);
-    ChipLogDetail(Zcl, "OpCreds: tutaj 13");
     VerifyOrExit(err == CHIP_NO_ERROR, nocResponse = ConvertToNOCResponseStatus(err));
 
     /**
@@ -825,7 +811,7 @@ bool emberAfOperationalCredentialsClusterUpdateNOCCallback(app::CommandHandler *
     // So we need to StartServer() here.
     app::DnssdServer::Instance().StartServer();
 
-// Attribute notification was already done by fabric table
+    // Attribute notification was already done by fabric table
 exit:
     // We have an NOC response
     if (nonDefaultStatus == Status::Success)
