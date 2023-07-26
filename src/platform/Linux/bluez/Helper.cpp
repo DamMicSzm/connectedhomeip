@@ -124,6 +124,7 @@ static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint
     BluezObjectSkeleton * object;
     GVariant * serviceData;
     GVariant * serviceUUID;
+    GVariant * serviceIdInfoBuilder;
     gchar * localName = nullptr;
     GVariantBuilder serviceDataBuilder;
     GVariantBuilder serviceUUIDsBuilder;
@@ -141,9 +142,10 @@ static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint
     g_variant_builder_init(&serviceDataBuilder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_init(&serviceUUIDsBuilder, G_VARIANT_TYPE("as"));
 
-    g_variant_builder_add(&serviceDataBuilder, "{sv}", apEndpoint->mpAdvertisingUUID,
-                          g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, &apEndpoint->mDeviceIdInfo,
-                                                    sizeof(apEndpoint->mDeviceIdInfo), sizeof(uint8_t)));
+    serviceIdInfoBuilder = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, &apEndpoint->mDeviceIdInfo,
+                                                     sizeof(apEndpoint->mDeviceIdInfo), sizeof(uint8_t));
+
+    g_variant_builder_add(&serviceDataBuilder, "{sv}", apEndpoint->mpAdvertisingUUID, serviceIdInfoBuilder);
     g_variant_builder_add(&serviceUUIDsBuilder, "s", apEndpoint->mpAdvertisingUUID);
 
     if (apEndpoint->mpAdapterName != nullptr)
@@ -192,6 +194,10 @@ static BluezLEAdvertisement1 * BluezAdvertisingCreate(BluezEndpoint * apEndpoint
     BLEManagerImpl::NotifyBLEPeripheralAdvConfiguredComplete(true, nullptr);
 
 exit:
+
+    // g_free(serviceData);
+    // g_free(serviceUUID);
+    // g_free(serviceIdInfoBuilder);
 
     g_free(localName);
     return adv;
@@ -1149,6 +1155,11 @@ void EndpointCleanup(BluezEndpoint * apEndpoint)
             g_free(apEndpoint->mpOwningName);
             apEndpoint->mpOwningName = nullptr;
         }
+        if (apEndpoint->mpObjMgr != nullptr)
+        {
+            g_object_unref(apEndpoint->mpObjMgr);
+            apEndpoint->mpObjMgr = nullptr;
+        }
         if (apEndpoint->mpAdapterName != nullptr)
         {
             g_free(apEndpoint->mpAdapterName);
@@ -1163,6 +1174,11 @@ void EndpointCleanup(BluezEndpoint * apEndpoint)
         {
             g_free(apEndpoint->mpRootPath);
             apEndpoint->mpRootPath = nullptr;
+        }
+        if (apEndpoint->mpRoot)
+        {
+            g_object_unref(apEndpoint->mpRoot);
+            apEndpoint->mpRoot = nullptr;
         }
         if (apEndpoint->mpAdvPath != nullptr)
         {
@@ -1392,8 +1408,8 @@ static void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObjec
 
             endpoint->mIsAdvertising = false;
 
-            g_object_unref(endpoint->mpAdapter);
-            endpoint->mpAdapter = nullptr;
+            // g_object_unref(endpoint->mpAdapter);
+            // endpoint->mpAdapter = nullptr;
 
             g_object_unref(endpoint->mpRoot);
             endpoint->mpRoot = nullptr;
@@ -1424,7 +1440,6 @@ static void BluezOnNameLost(GDBusConnection * aConn, const gchar * aName, gpoint
 
 static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
 {
-    GDBusObjectManager * manager;
     GError * error         = nullptr;
     GDBusConnection * conn = nullptr;
     VerifyOrExit(endpoint != nullptr, ChipLogError(DeviceLayer, "endpoint is NULL in %s", __func__));
@@ -1437,23 +1452,22 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     else
         endpoint->mpOwningName = g_strdup_printf("C-%04x", getpid() & 0xffff);
 
-    manager = g_dbus_object_manager_client_new_sync(
+    endpoint->mpObjMgr = g_dbus_object_manager_client_new_sync(
         conn, G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE, BLUEZ_INTERFACE, "/", bluez_object_manager_client_get_proxy_type,
         nullptr /* unused user data in the Proxy Type Func */, nullptr /*destroy notify */, nullptr /* cancellable */, &error);
 
-    VerifyOrExit(manager != nullptr, ChipLogError(DeviceLayer, "FAIL: Error getting object manager client: %s", error->message));
+    VerifyOrExit(endpoint->mpObjMgr != nullptr,
+                 ChipLogError(DeviceLayer, "FAIL: Error getting object manager client: %s", error->message));
 
-    endpoint->mpObjMgr = manager;
-
-    g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
-    g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
-    g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
+    g_signal_connect(endpoint->mpObjMgr, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
+    g_signal_connect(endpoint->mpObjMgr, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
+    g_signal_connect(endpoint->mpObjMgr, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged),
+                     endpoint);
 
     bluezObjectsSetup(endpoint);
     BluezOnAdapterPrepared(conn, endpoint->mpOwningName, endpoint);
     BLEManagerImpl::NotifyBLEPeripheralSetupComplete(true, nullptr);
 
-    g_object_unref(manager);
     g_object_unref(conn);
 exit:
     if (error != nullptr)
