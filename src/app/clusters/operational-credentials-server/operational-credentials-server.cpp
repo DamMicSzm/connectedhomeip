@@ -599,11 +599,11 @@ bool emberAfOperationalCredentialsClusterAddNOCCallback(app::CommandHandler * co
     auto nonDefaultStatus    = Status::Success;
     bool needRevert          = false;
 
-    CHIP_ERROR err                                = CHIP_NO_ERROR;
-    FabricIndex newFabricIndex                    = kUndefinedFabricIndex;
-    Credentials::GroupDataProvider::KeySet keyset = {};
-    const FabricInfo * newFabricInfo              = nullptr;
-    auto & fabricTable                            = Server::GetInstance().GetFabricTable();
+    CHIP_ERROR err             = CHIP_NO_ERROR;
+    FabricIndex newFabricIndex = kUndefinedFabricIndex;
+    Credentials::GroupDataProvider::KeySet keyset;
+    const FabricInfo * newFabricInfo = nullptr;
+    auto & fabricTable               = Server::GetInstance().GetFabricTable();
 
     auto * secureSession   = commandObj->GetExchangeContext()->GetSessionHandle()->AsSecureSession();
     auto & failSafeContext = Server::GetInstance().GetFailSafeContext();

@@ -121,10 +121,10 @@ public:
     {
         static constexpr size_t kLengthBytes = Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES;
         // Validity start time in microseconds since 2000-01-01T00:00:00 UTC ("the Epoch")
-        uint64_t start_time = {};
+        uint64_t start_time;
         // Actual key bits. Depending on context, it may be a raw epoch key (as seen within `SetKeySet` calls)
         // or it may be the derived operational group key (as seen in any other usage).
-        uint8_t key[kLengthBytes] = {};
+        uint8_t key[kLengthBytes];
 
         void Clear()
         {
@@ -143,7 +143,7 @@ public:
         {}
 
         // The actual keys for the group key set
-        EpochKey epoch_keys[kEpochKeysMax];
+        EpochKey epoch_keys[kEpochKeysMax] = {};
         // Logical id provided by the Administrator that configured the entry
         uint16_t keyset_id = 0;
         // Security policy to use for groups that use this keyset
