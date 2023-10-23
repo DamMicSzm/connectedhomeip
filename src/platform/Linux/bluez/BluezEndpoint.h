@@ -77,8 +77,9 @@ struct BluezEndpoint
 
     // Objects (interfaces) subscibed to by this service
     GDBusObjectManager * mpObjMgr = nullptr;
-    BluezAdapter1 * mpAdapter     = nullptr;
-    BluezDevice1 * mpDevice       = nullptr;
+    gulong BluezSigHandlersID[3]; ///< Bluez signal handlers id for disconnect
+    BluezAdapter1 * mpAdapter = nullptr;
+    BluezDevice1 * mpDevice   = nullptr;
 
     // Objects (interfaces) published by this service
     GDBusObjectManagerServer * mpRoot;

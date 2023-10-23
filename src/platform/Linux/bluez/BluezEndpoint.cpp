@@ -607,7 +607,11 @@ exit:
 /// Update the table of open BLE connections whenever a new device is spotted or its attributes have changed.
 static void UpdateConnectionTable(BluezDevice1 * apDevice, BluezEndpoint & aEndpoint)
 {
-    const char * objectPath      = g_dbus_proxy_get_object_path(G_DBUS_PROXY(apDevice));
+    VerifyOrReturn(aEndpoint.mpConnMap != nullptr,
+                   ChipLogError(DeviceLayer, "UpdateConnectionTable FAIL: NULL aEndpoint.mpConnMap in %s", __func__));
+
+    const char * objectPath = g_dbus_proxy_get_object_path(G_DBUS_PROXY(apDevice));
+
     BluezConnection * connection = static_cast<BluezConnection *>(g_hash_table_lookup(aEndpoint.mpConnMap, objectPath));
 
     if (connection != nullptr && !bluez_device1_get_connected(apDevice))
@@ -851,6 +855,11 @@ static void EndpointCleanup(BluezEndpoint * apEndpoint)
             g_object_unref(apEndpoint->mpConnectCancellable);
             apEndpoint->mpConnectCancellable = nullptr;
         }
+        if (apEndpoint->mpObjMgr != nullptr)
+        {
+            g_object_unref(apEndpoint->mpObjMgr);
+            apEndpoint->mpObjMgr = nullptr;
+        }
         g_free(apEndpoint);
     }
 }
@@ -1005,9 +1014,10 @@ static CHIP_ERROR StartupEndpointBindings(BluezEndpoint * endpoint)
     endpoint->mpObjMgr = manager;
     bluezObjectsSetup(endpoint);
 
-    g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
-    g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
-    g_signal_connect(manager, "interface-proxy-properties-changed", G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
+    endpoint->BluezSigHandlersID[0] = g_signal_connect(manager, "object-added", G_CALLBACK(BluezSignalOnObjectAdded), endpoint);
+    endpoint->BluezSigHandlersID[1] = g_signal_connect(manager, "object-removed", G_CALLBACK(BluezSignalOnObjectRemoved), endpoint);
+    endpoint->BluezSigHandlersID[2] = g_signal_connect(manager, "interface-proxy-properties-changed",
+                                                       G_CALLBACK(BluezSignalInterfacePropertiesChanged), endpoint);
 
     return CHIP_NO_ERROR;
 }
@@ -1117,7 +1127,13 @@ exit:
 CHIP_ERROR ShutdownBluezBleLayer(BluezEndpoint * apEndpoint)
 {
     VerifyOrReturnError(apEndpoint != nullptr, CHIP_ERROR_INVALID_ARGUMENT);
+
+    g_signal_handler_disconnect(apEndpoint->mpObjMgr, apEndpoint->BluezSigHandlersID[0]);
+    g_signal_handler_disconnect(apEndpoint->mpObjMgr, apEndpoint->BluezSigHandlersID[1]);
+    g_signal_handler_disconnect(apEndpoint->mpObjMgr, apEndpoint->BluezSigHandlersID[2]);
+
     g_object_unref(apEndpoint->mpAdapter);
+
     EndpointCleanup(apEndpoint);
     return CHIP_NO_ERROR;
 }
