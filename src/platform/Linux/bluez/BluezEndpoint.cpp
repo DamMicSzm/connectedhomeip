@@ -855,11 +855,7 @@ static void EndpointCleanup(BluezEndpoint * apEndpoint)
             g_object_unref(apEndpoint->mpConnectCancellable);
             apEndpoint->mpConnectCancellable = nullptr;
         }
-        if (apEndpoint->mpObjMgr != nullptr)
-        {
-            g_object_unref(apEndpoint->mpObjMgr);
-            apEndpoint->mpObjMgr = nullptr;
-        }
+
         g_free(apEndpoint);
     }
 }
