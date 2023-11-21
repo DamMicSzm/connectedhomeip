@@ -312,7 +312,8 @@ void BluezEndpoint::UpdateConnectionTable(BluezDevice1 * apDevice)
 
     if (connection != nullptr && !bluez_device1_get_connected(apDevice))
     {
-        ChipLogDetail(DeviceLayer, "Bluez disconnected");
+        ChipLogDetail(DeviceLayer, "BLE disconnected: conn %p, device %s, path %s", connection, connection->GetPeerAddress(),
+                      objectPath);
         BLEManagerImpl::CHIPoBluez_ConnectionClosed(connection);
         mConnMap.erase(objectPath);
         // TODO: the connection object should be released after BLEManagerImpl finishes cleaning up its resources
@@ -362,11 +363,12 @@ void BluezEndpoint::HandleNewDevice(BluezDevice1 * device)
     // The future connections for the same device will trigger ``Connect'' property change.
     // TODO: Factor common code in the two function.
     BluezConnection * conn;
-    VerifyOrExit(bluez_device1_get_connected(device), ChipLogError(DeviceLayer, "FAIL: device is not connected"));
+    VerifyOrExit(bluez_device1_get_connected(device),
+                 ChipLogError(DeviceLayer, "FAIL: Device %s is not connected", bluez_device1_get_address(device)));
 
     conn = GetBluezConnection(g_dbus_proxy_get_object_path(G_DBUS_PROXY(device)));
     VerifyOrExit(conn == nullptr,
-                 ChipLogError(DeviceLayer, "FAIL: connection already tracked: conn: %p new device: %s", conn,
+                 ChipLogError(DeviceLayer, "FAIL: Connection already tracked: conn: %p new device: %s", conn,
                               g_dbus_proxy_get_object_path(G_DBUS_PROXY(device))));
 
     conn                       = chip::Platform::New<BluezConnection>(*this, device);
@@ -379,8 +381,20 @@ exit:
     return;
 }
 
+void BluezEndpoint::BluezSignalNameOwnerChanged(const char * aNameOwner)
+{
+    ChipLogDetail(DeviceLayer, "BlueZ D-Bus name owner changed: %s", StringOrNullMarker(aNameOwner));
+    mIsBluezRunning = (aNameOwner != nullptr);
+    if (mIsBluezRunning)
+        SetupAdapter();
+    BLEManagerImpl::NotifyBLEBluezServiceRestarted(mIsBluezRunning);
+}
+
 void BluezEndpoint::BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject)
 {
+    // Skip processing if BlueZ service is not fully initialized yet.
+    VerifyOrReturn(mIsBluezRunning);
+
     // TODO: right now we do not handle addition/removal of adapters
     // Primary focus here is to handle addition of a device
     GAutoPtr<BluezDevice1> device(bluez_object_get_device1(BLUEZ_OBJECT(aObject)));
@@ -397,6 +411,19 @@ void BluezEndpoint::BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GD
     // TODO: for Device1, lookup connection, and call otPlatTobleHandleDisconnected
     // for Adapter1: unclear, crash if this pertains to our adapter? at least null out the self->mpAdapter.
     // for Characteristic1, or GattService -- handle here via calling otPlatTobleHandleDisconnected, or ignore.
+
+    GAutoPtr<BluezAdapter1> adapter(bluez_object_get_adapter1(BLUEZ_OBJECT(aObject)));
+    if (adapter)
+    {
+        char expectedPath[32];
+        snprintf(expectedPath, sizeof(expectedPath), BLUEZ_PATH "/hci%u", mAdapterId);
+        if (mpAdapter != nullptr && strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter.get())), expectedPath) == 0)
+        {
+            ChipLogDetail(DeviceLayer, "BlueZ adapter removed: %s", expectedPath);
+            g_object_unref(mpAdapter);
+            mpAdapter = nullptr;
+        }
+    }
 }
 
 BluezGattService1 * BluezEndpoint::CreateGattService(const char * aUUID)
@@ -426,6 +453,7 @@ void BluezEndpoint::SetupAdapter()
     char expectedPath[32];
     snprintf(expectedPath, sizeof(expectedPath), BLUEZ_PATH "/hci%u", mAdapterId);
 
+    ChipLogError(DeviceLayer, "TRACE: AAAAAAAAAAAAAAAAAAAAAAAA %s", __func__);
     GList * objects = g_dbus_object_manager_get_objects(mpObjMgr);
     for (auto l = objects; l != nullptr && mpAdapter == nullptr; l = l->next)
     {
@@ -615,7 +643,7 @@ CHIP_ERROR BluezEndpoint::StartupEndpointBindings()
     GAutoPtr<GError> err;
     GAutoPtr<GDBusConnection> conn(g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, &MakeUniquePointerReceiver(err).Get()));
     VerifyOrReturnError(conn != nullptr, CHIP_ERROR_INTERNAL,
-                        ChipLogError(DeviceLayer, "FAIL: get bus sync in %s, error: %s", __func__, err->message));
+                        ChipLogError(DeviceLayer, "FAIL: Get bus sync in %s, error: %s", __func__, err->message));
 
     if (mpAdapterName != nullptr)
         mpOwningName = g_strdup_printf("%s", mpAdapterName);
@@ -632,6 +660,15 @@ CHIP_ERROR BluezEndpoint::StartupEndpointBindings()
     VerifyOrReturnError(mpObjMgr != nullptr, CHIP_ERROR_INTERNAL,
                         ChipLogError(DeviceLayer, "FAIL: Error getting object manager client: %s", err->message));
 
+    // If the object manager client was created successfully BlueZ must be running.
+    mIsBluezRunning = true;
+
+    g_signal_connect(mpObjMgr, "notify::name-owner",
+                     G_CALLBACK(+[](GDBusObjectManagerClient * aMgr, GParamSpec * aSpec, BluezEndpoint * self) {
+                         GAutoPtr<char> nameOwner(g_dbus_object_manager_client_get_name_owner(aMgr));
+                         self->BluezSignalNameOwnerChanged(nameOwner.get());
+                     }),
+                     this);
     g_signal_connect(mpObjMgr, "object-added", G_CALLBACK(+[](GDBusObjectManager * aMgr, GDBusObject * aObj, BluezEndpoint * self) {
                          return self->BluezSignalOnObjectAdded(aMgr, aObj);
                      }),

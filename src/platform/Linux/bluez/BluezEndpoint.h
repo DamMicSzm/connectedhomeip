@@ -112,6 +112,7 @@ private:
     gboolean BluezCharacteristicAcquireNotify(BluezGattCharacteristic1 * aChar, GDBusMethodInvocation * aInv, GVariant * aOptions);
     gboolean BluezCharacteristicConfirm(BluezGattCharacteristic1 * aChar, GDBusMethodInvocation * aInv);
 
+    void BluezSignalNameOwnerChanged(const char * aNameOwner);
     void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject);
     void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject);
     void BluezSignalInterfacePropertiesChanged(GDBusObjectManagerClient * aManager, GDBusObjectProxy * aObject,
@@ -143,6 +144,7 @@ private:
     GDBusObjectManager * mpObjMgr = nullptr;
     BluezAdapter1 * mpAdapter     = nullptr;
     BluezDevice1 * mpDevice       = nullptr;
+    bool mIsBluezRunning          = false;
 
     // Objects (interfaces) published by this service
     GDBusObjectManagerServer * mpRoot = nullptr;

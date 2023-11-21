@@ -240,11 +240,19 @@ void BLEManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
 
 void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEvent)
 {
-    CHIP_ERROR err         = CHIP_NO_ERROR;
-    bool controlOpComplete = false;
+    CHIP_ERROR err = CHIP_NO_ERROR;
     ChipLogDetail(DeviceLayer, "HandlePlatformSpecificBLEEvent %d", apEvent->Type);
     switch (apEvent->Type)
     {
+    case DeviceEventType::kPlatformLinuxBLEBluezServiceRestarted:
+        if (apEvent->Platform.BLEBluezServiceRestarted.mIsRunning)
+        {
+            // Bluez service has restarted. Re-initialize registrations and drop any in-progress operations.
+            sInstance.mFlags.Clear(Flags::kAppRegistered).Clear(Flags::kAdvertising);
+            sInstance.mFlags.Clear(Flags::kControlOpInProgress);
+            DriveBLEState();
+        }
+        break;
     case DeviceEventType::kPlatformLinuxBLECentralConnected:
         if (mBLEScanConfig.mBleScanState == BleScanState::kConnecting)
         {
@@ -299,8 +307,8 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
         break;
     case DeviceEventType::kPlatformLinuxBLEPeripheralRegisterAppComplete:
         VerifyOrExit(apEvent->Platform.BLEPeripheralRegisterAppComplete.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
-        mFlags.Set(Flags::kAppRegistered);
-        controlOpComplete = true;
+        mFlags.Set(Flags::kAppRegistered).Clear(Flags::kControlOpInProgress);
+        DriveBLEState();
         break;
     case DeviceEventType::kPlatformLinuxBLEPeripheralSetupComplete:
         ChipLogDetail(DeviceLayer, "kPlatformLinuxBLEPeripheralSetupComplete");
@@ -319,12 +327,6 @@ exit:
         ChipLogError(DeviceLayer, "Disabling CHIPoBLE service due to error: %s", ErrorStr(err));
         mServiceMode = ConnectivityManager::kCHIPoBLEServiceMode_Disabled;
         sInstance.mFlags.Clear(Flags::kControlOpInProgress);
-    }
-
-    if (controlOpComplete)
-    {
-        mFlags.Clear(Flags::kControlOpInProgress);
-        DriveBLEState();
     }
 }
 
@@ -724,6 +726,14 @@ CHIP_ERROR BLEManagerImpl::CancelConnection()
     else if (mBLEScanConfig.mBleScanState != BleScanState::kNotScanning)
         mDeviceScanner.StopScan();
     return CHIP_NO_ERROR;
+}
+
+void BLEManagerImpl::NotifyBLEBluezServiceRestarted(bool aIsRunning)
+{
+    ChipDeviceEvent event;
+    event.Type                                         = DeviceEventType::kPlatformLinuxBLEBluezServiceRestarted;
+    event.Platform.BLEBluezServiceRestarted.mIsRunning = aIsRunning;
+    PlatformMgr().PostEventOrDie(&event);
 }
 
 void BLEManagerImpl::NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, void * apAppstate)
