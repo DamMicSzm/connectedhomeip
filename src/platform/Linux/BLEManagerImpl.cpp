@@ -186,7 +186,6 @@ uint16_t BLEManagerImpl::_NumConnections()
 
 CHIP_ERROR BLEManagerImpl::ConfigureBle(uint32_t aAdapterId, bool aIsCentral)
 {
-
     mAdapterId = aAdapterId;
     mIsCentral = aIsCentral;
 
@@ -244,12 +243,32 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
     ChipLogDetail(DeviceLayer, "HandlePlatformSpecificBLEEvent %d", apEvent->Type);
     switch (apEvent->Type)
     {
+    case DeviceEventType::kPlatformLinuxBLEBluezLEAdvertisement1Release:
+        if (apEvent->Platform.BLEBluezLEAdvertisement1Release.mIsBluezRunning)
+        {
+            // Release signal not coming on DBUS when bluetooth service was killed Release Advertisement should be progress by
+            // event.
+            if (!sInstance.mFlags.Has(Flags::kAdvertisingConfigured))
+                ExitNow();
+
+            sInstance.mFlags.Clear(Flags::kAdvertising).Clear(Flags::kAdvertisingConfigured);
+            mBLEAdvertisement.BluezLEAdvertisement1Release();
+        }
+        break;
     case DeviceEventType::kPlatformLinuxBLEBluezServiceRestarted:
-        if (apEvent->Platform.BLEBluezServiceRestarted.mIsRunning)
+        if (apEvent->Platform.BLEBluezServiceRestarted.mIsBluezRunning)
         {
             // Bluez service has restarted. Re-initialize registrations and drop any in-progress operations.
-            sInstance.mFlags.Clear(Flags::kAppRegistered).Clear(Flags::kAdvertising);
-            sInstance.mFlags.Clear(Flags::kControlOpInProgress);
+            ChipLogProgress(DeviceLayer, "Bluez service restarted");
+            sInstance.mFlags.Clear(Flags::kAppRegistered).Clear(Flags::kBluezAdapterReady).Clear(Flags::kControlOpInProgress);
+            sInstance.mFlags.Set(Flags::kAdvertisingRefreshNeeded);
+            DriveBLEState();
+        }
+        break;
+    case DeviceEventType::kPlatformLinuxBLEBluezSetupAdapterComplete:
+        if (apEvent->Platform.BLEBluezSetupAdapter.mIsBluezRunning)
+        {
+            sInstance.mFlags.Set(Flags::kBluezAdapterReady);
             DriveBLEState();
         }
         break;
@@ -308,13 +327,6 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
     case DeviceEventType::kPlatformLinuxBLEPeripheralRegisterAppComplete:
         VerifyOrExit(apEvent->Platform.BLEPeripheralRegisterAppComplete.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
         mFlags.Set(Flags::kAppRegistered).Clear(Flags::kControlOpInProgress);
-        DriveBLEState();
-        break;
-    case DeviceEventType::kPlatformLinuxBLEPeripheralSetupComplete:
-        ChipLogDetail(DeviceLayer, "kPlatformLinuxBLEPeripheralSetupComplete");
-        VerifyOrExit(apEvent->Platform.BLEPeripheralSetupComplete.mIsSuccess, err = CHIP_ERROR_INCORRECT_STATE);
-        mFlags.Clear(Flags::kAppRegistered).Clear(Flags::kAdvertisingConfigured).Clear(Flags::kAdvertising);
-
         DriveBLEState();
         break;
     default:
@@ -584,8 +596,16 @@ void BLEManagerImpl::DriveBLEState()
         mFlags.Set(Flags::kBluezBLELayerInitialized);
     }
 
+    // Setup Bluez adapter if adapter is not ready yet.
+    if (!mFlags.Has(Flags::kBluezAdapterReady))
+    {
+        mEndpoint.SetupAdapter();
+        ExitNow();
+    }
+
     // Register the CHIPoBLE application with the Bluez BLE layer if needed.
-    if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered))
+    if (!mIsCentral && mServiceMode == ConnectivityManager::kCHIPoBLEServiceMode_Enabled && !mFlags.Has(Flags::kAppRegistered) &&
+        mFlags.Has(Flags::kBluezAdapterReady))
     {
         SuccessOrExit(err = mEndpoint.RegisterGattApplication());
         mFlags.Set(Flags::kControlOpInProgress);
@@ -728,11 +748,27 @@ CHIP_ERROR BLEManagerImpl::CancelConnection()
     return CHIP_NO_ERROR;
 }
 
+void BLEManagerImpl::NotifyBLEBluezLEAdvertisement1Release(bool aIsRunning)
+{
+    ChipDeviceEvent event;
+    event.Type                                                     = DeviceEventType::kPlatformLinuxBLEBluezLEAdvertisement1Release;
+    event.Platform.BLEBluezLEAdvertisement1Release.mIsBluezRunning = aIsRunning;
+    PlatformMgr().PostEventOrDie(&event);
+}
+
 void BLEManagerImpl::NotifyBLEBluezServiceRestarted(bool aIsRunning)
 {
     ChipDeviceEvent event;
-    event.Type                                         = DeviceEventType::kPlatformLinuxBLEBluezServiceRestarted;
-    event.Platform.BLEBluezServiceRestarted.mIsRunning = aIsRunning;
+    event.Type                                              = DeviceEventType::kPlatformLinuxBLEBluezServiceRestarted;
+    event.Platform.BLEBluezServiceRestarted.mIsBluezRunning = aIsRunning;
+    PlatformMgr().PostEventOrDie(&event);
+}
+
+void BLEManagerImpl::NotifyBLEBluezSetupAdapterComplete(bool aIsRunning)
+{
+    ChipDeviceEvent event;
+    event.Type                                          = DeviceEventType::kPlatformLinuxBLEBluezSetupAdapterComplete;
+    event.Platform.BLEBluezSetupAdapter.mIsBluezRunning = aIsRunning;
     PlatformMgr().PostEventOrDie(&event);
 }
 
@@ -742,15 +778,6 @@ void BLEManagerImpl::NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, voi
     event.Type                                                 = DeviceEventType::kPlatformLinuxBLEPeripheralRegisterAppComplete;
     event.Platform.BLEPeripheralRegisterAppComplete.mIsSuccess = aIsSuccess;
     event.Platform.BLEPeripheralRegisterAppComplete.mpAppstate = apAppstate;
-    PlatformMgr().PostEventOrDie(&event);
-}
-
-void BLEManagerImpl::NotifyBLEPeripheralSetupComplete(bool aIsSuccess, void * apAppstate)
-{
-    ChipDeviceEvent event;
-    event.Type                                           = DeviceEventType::kPlatformLinuxBLEPeripheralSetupComplete;
-    event.Platform.BLEPeripheralSetupComplete.mIsSuccess = aIsSuccess;
-    event.Platform.BLEPeripheralSetupComplete.mpAppstate = apAppstate;
     PlatformMgr().PostEventOrDie(&event);
 }
 

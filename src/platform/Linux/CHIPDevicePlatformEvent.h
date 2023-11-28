@@ -45,7 +45,9 @@ enum PublicPlatformSpecificEventTypes
 enum InternalPlatformSpecificEventTypes
 {
     kPlatformLinuxEvent = kRange_InternalPlatformSpecific,
+    kPlatformLinuxBLEBluezLEAdvertisement1Release,
     kPlatformLinuxBLEBluezServiceRestarted,
+    kPlatformLinuxBLEBluezSetupAdapterComplete,
     kPlatformLinuxBLECentralConnected,
     kPlatformLinuxBLECentralConnectFailed,
     kPlatformLinuxBLEWriteComplete,
@@ -55,8 +57,7 @@ enum InternalPlatformSpecificEventTypes
     kPlatformLinuxBLEOutOfBuffersEvent,
     kPlatformLinuxBLEPeripheralRegisterAppComplete,
     kPlatformLinuxBLEPeripheralAdvStartComplete,
-    kPlatformLinuxBLEPeripheralAdvStopComplete,
-    kPlatformLinuxBLEPeripheralSetupComplete
+    kPlatformLinuxBLEPeripheralAdvStopComplete
 };
 
 } // namespace DeviceEventType
@@ -70,8 +71,16 @@ struct ChipDevicePlatformEvent
     {
         struct
         {
-            bool mIsRunning;
+            bool mIsBluezRunning;
+        } BLEBluezLEAdvertisement1Release;
+        struct
+        {
+            bool mIsBluezRunning;
         } BLEBluezServiceRestarted;
+        struct
+        {
+            bool mIsBluezRunning;
+        } BLEBluezSetupAdapter;
         struct
         {
             BLE_CONNECTION_OBJECT mConnection;
@@ -99,11 +108,6 @@ struct ChipDevicePlatformEvent
             bool mIsSuccess;
             void * mpAppstate;
         } BLEPeripheralRegisterAppComplete;
-        struct
-        {
-            bool mIsSuccess;
-            void * mpAppstate;
-        } BLEPeripheralSetupComplete;
         struct
         {
             bool mIsSuccess;

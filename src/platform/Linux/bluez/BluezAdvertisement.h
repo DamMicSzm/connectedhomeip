@@ -56,9 +56,14 @@ public:
     /// completion via a call to BLEManagerImpl::NotifyBLEPeripheralAdvStopComplete().
     CHIP_ERROR Stop();
 
+    /// Release BLE advertising
+    ///
+    /// BLE advertising is release by event call back. handle-release signal not emitted
+    /// when bluetooth service was killed by kill -9
+    void BluezLEAdvertisement1Release();
+
 private:
     BluezLEAdvertisement1 * CreateLEAdvertisement();
-    gboolean BluezLEAdvertisement1Release(BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInv);
 
     CHIP_ERROR InitImpl();
 
@@ -77,9 +82,8 @@ private:
     bool mIsAdvertising = false;
 
     Ble::ChipBLEDeviceIdentificationInfo mDeviceIdInfo;
-    char * mpAdvPath     = nullptr;
-    char * mpAdapterName = nullptr;
-    char * mpAdvUUID     = nullptr;
+    char * mpAdvPath = nullptr;
+    char * mpAdvUUID = nullptr;
     ChipAdvType mAdvType;
     uint16_t mAdvDurationMs = 0;
 };

@@ -361,6 +361,7 @@ void BluezEndpoint::HandleNewDevice(BluezDevice1 * device)
     // We need to handle device connection both this function and BluezSignalInterfacePropertiesChanged
     // When a device is connected for first time, this function will be triggered.
     // The future connections for the same device will trigger ``Connect'' property change.
+
     // TODO: Factor common code in the two function.
     BluezConnection * conn;
     VerifyOrExit(bluez_device1_get_connected(device),
@@ -383,11 +384,15 @@ exit:
 
 void BluezEndpoint::BluezSignalNameOwnerChanged(const char * aNameOwner)
 {
-    ChipLogDetail(DeviceLayer, "BlueZ D-Bus name owner changed: %s", StringOrNullMarker(aNameOwner));
+
     mIsBluezRunning = (aNameOwner != nullptr);
     if (mIsBluezRunning)
-        SetupAdapter();
-    BLEManagerImpl::NotifyBLEBluezServiceRestarted(mIsBluezRunning);
+    {
+        ChipLogProgress(DeviceLayer, "BlueZ D-Bus name owner changed %s", aNameOwner);
+
+        BLEManagerImpl::NotifyBLEBluezLEAdvertisement1Release(mIsBluezRunning);
+        BLEManagerImpl::NotifyBLEBluezServiceRestarted(mIsBluezRunning);
+    }
 }
 
 void BluezEndpoint::BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject)
@@ -395,8 +400,24 @@ void BluezEndpoint::BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBu
     // Skip processing if BlueZ service is not fully initialized yet.
     VerifyOrReturn(mIsBluezRunning);
 
-    // TODO: right now we do not handle addition/removal of adapters
-    // Primary focus here is to handle addition of a device
+    const GDBusInterface * interface = nullptr;
+    const char * path                = g_dbus_object_get_object_path(aObject);
+    char * expectedPath              = g_strdup_printf("%s/hci%d", BLUEZ_PATH, mAdapterId);
+
+    if (strcmp(path, expectedPath) == 0)
+    {
+        interface = g_dbus_object_get_interface(G_DBUS_OBJECT(aObject), ADAPTER_INTERFACE);
+
+        if (interface != nullptr && BLUEZ_IS_ADAPTER1(interface))
+            BLEManagerImpl::NotifyBLEBluezServiceRestarted(mIsBluezRunning);
+
+        ChipLogProgress(DeviceLayer, "Added BlueZ adapter %s", expectedPath);
+        return;
+    }
+
+    // Skip if adapter not setup yet the Bluez can be in restarted process.
+    VerifyOrReturn(mpAdapter != nullptr);
+
     GAutoPtr<BluezDevice1> device(bluez_object_get_device1(BLUEZ_OBJECT(aObject)));
     VerifyOrReturn(device.get() != nullptr);
 
@@ -419,9 +440,11 @@ void BluezEndpoint::BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GD
         snprintf(expectedPath, sizeof(expectedPath), BLUEZ_PATH "/hci%u", mAdapterId);
         if (mpAdapter != nullptr && strcmp(g_dbus_proxy_get_object_path(G_DBUS_PROXY(adapter.get())), expectedPath) == 0)
         {
-            ChipLogDetail(DeviceLayer, "BlueZ adapter removed: %s", expectedPath);
             g_object_unref(mpAdapter);
             mpAdapter = nullptr;
+            BLEManagerImpl::NotifyBLEBluezLEAdvertisement1Release(TRUE);
+
+            ChipLogProgress(DeviceLayer, "Removed BlueZ adapter %s", expectedPath);
         }
     }
 }
@@ -453,7 +476,6 @@ void BluezEndpoint::SetupAdapter()
     char expectedPath[32];
     snprintf(expectedPath, sizeof(expectedPath), BLUEZ_PATH "/hci%u", mAdapterId);
 
-    ChipLogError(DeviceLayer, "TRACE: AAAAAAAAAAAAAAAAAAAAAAAA %s", __func__);
     GList * objects = g_dbus_object_manager_get_objects(mpObjMgr);
     for (auto l = objects; l != nullptr && mpAdapter == nullptr; l = l->next)
     {
@@ -493,6 +515,7 @@ void BluezEndpoint::SetupAdapter()
     // and the flag is necessary to force using LE transport.
     bluez_adapter1_set_discoverable(mpAdapter, FALSE);
 
+    BLEManagerImpl::NotifyBLEBluezSetupAdapterComplete(mIsBluezRunning);
 exit:
     g_list_free_full(objects, g_object_unref);
 }
@@ -685,8 +708,6 @@ CHIP_ERROR BluezEndpoint::StartupEndpointBindings()
                      }),
                      this);
 
-    SetupAdapter();
-
     return CHIP_NO_ERROR;
 }
 
@@ -718,8 +739,8 @@ CHIP_ERROR BluezEndpoint::Init(uint32_t aAdapterId, bool aIsCentral, const char 
         mpConnectCancellable = g_cancellable_new();
     }
 
-    err = PlatformMgrImpl().GLibMatterContextInvokeSync(
-        +[](BluezEndpoint * self) { return self->StartupEndpointBindings(); }, this);
+    err =
+        PlatformMgrImpl().GLibMatterContextInvokeSync(+[](BluezEndpoint * self) { return self->StartupEndpointBindings(); }, this);
     VerifyOrReturnError(err == CHIP_NO_ERROR, err, ChipLogError(DeviceLayer, "Failed to schedule endpoint initialization"));
 
     ChipLogDetail(DeviceLayer, "BlueZ integration init success");

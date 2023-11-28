@@ -103,7 +103,7 @@ BluezLEAdvertisement1 * BluezAdvertisement::CreateLEAdvertisement()
     bluez_object_skeleton_set_leadvertisement1(object, adv);
     g_signal_connect(adv, "handle-release",
                      G_CALLBACK(+[](BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInv, BluezAdvertisement * self) {
-                         return self->BluezLEAdvertisement1Release(aAdv, aInv);
+                         BLEManagerImpl::NotifyBLEBluezLEAdvertisement1Release(self->mIsAdvertising);
                      }),
                      this);
 
@@ -113,14 +113,13 @@ BluezLEAdvertisement1 * BluezAdvertisement::CreateLEAdvertisement()
     return adv;
 }
 
-gboolean BluezAdvertisement::BluezLEAdvertisement1Release(BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInvocation)
+void BluezAdvertisement::BluezLEAdvertisement1Release()
 {
     ChipLogDetail(DeviceLayer, "Release BLE adv object in %s", __func__);
     g_dbus_object_manager_server_unexport(mpRoot, mpAdvPath);
     g_object_unref(mpAdv);
     mpAdv          = nullptr;
     mIsAdvertising = false;
-    return TRUE;
 }
 
 CHIP_ERROR BluezAdvertisement::InitImpl()
