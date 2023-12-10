@@ -60,7 +60,7 @@ public:
     ///
     /// BLE advertising is release by event call back. handle-release signal not emitted
     /// when bluetooth service was killed by kill -9
-    void BluezLEAdvertisement1Release();
+    void LEAdvertisementRelease();
 
 private:
     BluezLEAdvertisement1 * CreateLEAdvertisement();

@@ -345,6 +345,7 @@ void BluezEndpoint::BluezSignalInterfacePropertiesChanged(GDBusObjectManagerClie
                                                           GDBusProxy * aInterface, GVariant * aChangedProperties,
                                                           const char * const * aInvalidatedProps)
 {
+
     VerifyOrReturn(mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL mpAdapter in %s", __func__));
     VerifyOrReturn(strcmp(g_dbus_proxy_get_interface_name(aInterface), DEVICE_INTERFACE) == 0, );
 
@@ -384,14 +385,13 @@ exit:
 
 void BluezEndpoint::BluezSignalNameOwnerChanged(const char * aNameOwner)
 {
-
     mIsBluezRunning = (aNameOwner != nullptr);
     if (mIsBluezRunning)
     {
         ChipLogProgress(DeviceLayer, "BlueZ D-Bus name owner changed %s", aNameOwner);
-
-        BLEManagerImpl::NotifyBLEBluezLEAdvertisement1Release(mIsBluezRunning);
-        BLEManagerImpl::NotifyBLEBluezServiceRestarted(mIsBluezRunning);
+        BLEManagerImpl::NotifyBLEAdvertisementRelease(mIsBluezRunning);
+        BLEManagerImpl::NotifyBLEAdapterDisconnected(mIsBluezRunning);
+        BLEManagerImpl::NotifyBLEAdapterConnected(mIsBluezRunning);
     }
 }
 
@@ -409,9 +409,8 @@ void BluezEndpoint::BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBu
         interface = g_dbus_object_get_interface(G_DBUS_OBJECT(aObject), ADAPTER_INTERFACE);
 
         if (interface != nullptr && BLUEZ_IS_ADAPTER1(interface))
-            BLEManagerImpl::NotifyBLEBluezServiceRestarted(mIsBluezRunning);
+            BLEManagerImpl::NotifyBLEAdapterConnected(mIsBluezRunning);
 
-        ChipLogProgress(DeviceLayer, "Added BlueZ adapter %s", expectedPath);
         return;
     }
 
@@ -442,9 +441,8 @@ void BluezEndpoint::BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GD
         {
             g_object_unref(mpAdapter);
             mpAdapter = nullptr;
-            BLEManagerImpl::NotifyBLEBluezLEAdvertisement1Release(TRUE);
 
-            ChipLogProgress(DeviceLayer, "Removed BlueZ adapter %s", expectedPath);
+            BLEManagerImpl::NotifyBLEAdapterDisconnected(mIsBluezRunning);
         }
     }
 }
@@ -506,7 +504,7 @@ void BluezEndpoint::SetupAdapter()
         g_list_free_full(interfaces, g_object_unref);
     }
 
-    VerifyOrExit(mpAdapter != nullptr, ChipLogError(DeviceLayer, "FAIL: NULL mpAdapter in %s", __func__));
+    VerifyOrExit(mpAdapter != nullptr, ChipLogError(DeviceLayer, "BlueZ has not found any adapter for setup"));
 
     bluez_adapter1_set_powered(mpAdapter, TRUE);
 
@@ -515,7 +513,7 @@ void BluezEndpoint::SetupAdapter()
     // and the flag is necessary to force using LE transport.
     bluez_adapter1_set_discoverable(mpAdapter, FALSE);
 
-    BLEManagerImpl::NotifyBLEBluezSetupAdapterComplete(mIsBluezRunning);
+    BLEManagerImpl::NotifyBLESetupAdapterComplete(mIsBluezRunning);
 exit:
     g_list_free_full(objects, g_object_unref);
 }

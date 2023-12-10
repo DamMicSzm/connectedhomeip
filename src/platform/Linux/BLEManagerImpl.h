@@ -92,9 +92,10 @@ public:
     static void HandleTXCharCCCDWrite(BLE_CONNECTION_OBJECT user_data);
     static void HandleTXComplete(BLE_CONNECTION_OBJECT user_data);
 
-    static void NotifyBLEBluezLEAdvertisement1Release(bool aIsRunning);
-    static void NotifyBLEBluezServiceRestarted(bool aIsRunning);
-    static void NotifyBLEBluezSetupAdapterComplete(bool aIsRunning);
+    static void NotifyBLEAdvertisementRelease(bool aIsRunning);
+    static void NotifyBLEAdapterConnected(bool aIsRunning);
+    static void NotifyBLEAdapterDisconnected(bool aIsRunning);
+    static void NotifyBLESetupAdapterComplete(bool aIsRunning);
 
     static void NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, void * apAppstate);
     static void NotifyBLEPeripheralSetupComplete(bool aIsSuccess, void * apAppstate);
@@ -170,8 +171,8 @@ private:
         kFastAdvertisingEnabled   = 0x0080, /**< The application has enabled fast advertising. */
         kUseCustomDeviceName      = 0x0100, /**< The application has configured a custom BLE device name. */
         kAdvertisingRefreshNeeded = 0x0200, /**< The advertising configuration/state in BLE layer needs to be updated. */
-        kBluezServiceRestarted    = 0x0400, /**< The Bluez service has been restarted. */
-        kBluezAdapterReady        = 0x0800, /**< The Bluez adapter is setup and ready to use */
+        kAdapterAvailable         = 0x0400, /**< The Bluez service has been restarted. */
+        kAdapterReady             = 0x0800, /**< The Bluez adapter is setup and ready to use */
     };
 
     enum
