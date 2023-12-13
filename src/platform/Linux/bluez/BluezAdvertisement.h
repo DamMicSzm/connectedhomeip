@@ -82,8 +82,9 @@ private:
     bool mIsAdvertising = false;
 
     Ble::ChipBLEDeviceIdentificationInfo mDeviceIdInfo;
-    char * mpAdvPath = nullptr;
-    char * mpAdvUUID = nullptr;
+    char * mpAdvPath     = nullptr;
+    char * mpAdapterName = nullptr;
+    char * mpAdvUUID     = nullptr;
     ChipAdvType mAdvType;
     uint16_t mAdvDurationMs = 0;
 };
