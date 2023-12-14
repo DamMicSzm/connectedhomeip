@@ -72,6 +72,7 @@ public:
     CHIP_ERROR Init(uint32_t aAdapterId, bool aIsCentral, const char * apBleAddr, const char * apBleName);
     void Shutdown();
 
+    void SetupAdapter();
     BluezAdapter1 * GetAdapter() const { return mpAdapter; }
     const char * GetAdapterName() const { return mpAdapterName; }
 
@@ -94,7 +95,6 @@ private:
 
     CHIP_ERROR StartupEndpointBindings();
 
-    void SetupAdapter();
     void SetupGattServer(GDBusConnection * aConn);
     void SetupGattService();
 
@@ -112,6 +112,7 @@ private:
     gboolean BluezCharacteristicAcquireNotify(BluezGattCharacteristic1 * aChar, GDBusMethodInvocation * aInv, GVariant * aOptions);
     gboolean BluezCharacteristicConfirm(BluezGattCharacteristic1 * aChar, GDBusMethodInvocation * aInv);
 
+    void BluezSignalNameOwnerChanged(const char * aNameOwner);
     void BluezSignalOnObjectAdded(GDBusObjectManager * aManager, GDBusObject * aObject);
     void BluezSignalOnObjectRemoved(GDBusObjectManager * aManager, GDBusObject * aObject);
     void BluezSignalInterfacePropertiesChanged(GDBusObjectManagerClient * aManager, GDBusObjectProxy * aObject,
@@ -143,6 +144,7 @@ private:
     GDBusObjectManager * mpObjMgr = nullptr;
     BluezAdapter1 * mpAdapter     = nullptr;
     BluezDevice1 * mpDevice       = nullptr;
+    bool mIsBluezRunning          = false;
 
     // Objects (interfaces) published by this service
     GDBusObjectManagerServer * mpRoot = nullptr;

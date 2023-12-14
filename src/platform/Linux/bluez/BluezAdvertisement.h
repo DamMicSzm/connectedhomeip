@@ -56,9 +56,14 @@ public:
     /// completion via a call to BLEManagerImpl::NotifyBLEPeripheralAdvStopComplete().
     CHIP_ERROR Stop();
 
+    /// Release BLE advertising
+    ///
+    /// BLE advertising is release by event call back. handle-release signal not emitted
+    /// when bluetooth service was killed by kill -9
+    void LEAdvertisementRelease();
+
 private:
     BluezLEAdvertisement1 * CreateLEAdvertisement();
-    gboolean BluezLEAdvertisement1Release(BluezLEAdvertisement1 * aAdv, GDBusMethodInvocation * aInv);
 
     CHIP_ERROR InitImpl();
 

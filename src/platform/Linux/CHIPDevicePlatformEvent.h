@@ -45,6 +45,10 @@ enum PublicPlatformSpecificEventTypes
 enum InternalPlatformSpecificEventTypes
 {
     kPlatformLinuxEvent = kRange_InternalPlatformSpecific,
+    kPlatformLinuxBLEAdvertisementRelease,
+    kPlatformLinuxBLEAdapterDisconnected,
+    kPlatformLinuxBLEAdapterConnected,
+    kPlatformLinuxBLESetupAdapterComplete,
     kPlatformLinuxBLECentralConnected,
     kPlatformLinuxBLECentralConnectFailed,
     kPlatformLinuxBLEWriteComplete,
@@ -66,6 +70,22 @@ struct ChipDevicePlatformEvent
 {
     union
     {
+        struct
+        {
+            bool mIsBLERunning;
+        } BLEAdvertisementRelease;
+        struct
+        {
+            bool mIsBLERunning;
+        } BLEAdapterConnected;
+        struct
+        {
+            bool mIsBLERunning;
+        } BLEAdapterDisconnected;
+        struct
+        {
+            bool mIsBLERunning;
+        } BLESetupAdapter;
         struct
         {
             BLE_CONNECTION_OBJECT mConnection;
